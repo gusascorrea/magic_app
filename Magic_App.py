@@ -1,8 +1,8 @@
 import fundamentus as fd
 import pandas as pd
 import numpy as np
-import warnings
-from io import StringIO
+#import warnings
+#from io import StringIO
 import streamlit as st
 
 st.title('Lista de 20 Ações Mais Baratas')
