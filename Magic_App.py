@@ -43,6 +43,8 @@ if gerar:
 
     df = df[~df.index.isin(financeiras)]
 
+    df = df[~df.index.astype(str).str.contains('33|34')]
+
     # Mantendo Margem Ebit Apenas Maior que Zero
 
     df = df.loc[df['Mrg Ebit'] > 0]
