@@ -1,0 +1,4 @@
+fundamentus
+pandas
+numpy
+streamlit
