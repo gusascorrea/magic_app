@@ -43,7 +43,9 @@ if gerar:
 
     df = df[~df.index.isin(financeiras)]
 
-    df = df[~df.index.astype(str).str.contains('33|34')]
+    # Removendo ADRs e BDRs
+
+    df = df[~(df.index.astype(str).str.contains('33') | df.index.astype(str).str.contains('34'))]
 
     # Mantendo Margem Ebit Apenas Maior que Zero
 
