@@ -77,5 +77,7 @@ if gerar:
 
     sorted_df['Valor'] = sorted_df['Quantidade'] * sorted_df['Cotação']
 
-    st.write(sorted_df[['Cotação','EV/EBIT', 'Liq.2meses', 'Quantidade', 'Valor']].head(20))
+    sorted_df = sorted_df[['Cotação','EV/EBIT', 'Liq.2meses', 'Quantidade', 'Valor']].head(20)
+
+    st.write(sorted_df)
 
