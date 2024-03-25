@@ -15,7 +15,6 @@ To use the dashboard:
 2. Navigate through the different panels using the sidebar options.
 
 ## How to Run
-## How to Run
 The application is available online at [Magic Formula and Value Investing Dashboard](https://magicapp-35helmd6kwtp7zkhpeqxg8.streamlit.app/). Simply click the link to access the dashboard and explore its features.
 
 ## References
