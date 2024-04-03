@@ -441,6 +441,7 @@ def references_eng():
 
 def main():
 
+    # Lançado oficialmente 03/04/2024
     #language = st.sidebar.radio("Select Language", ['Português', 'English'])
     language = 'Português'
 

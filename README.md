@@ -13,7 +13,7 @@ O Magic App é uma aplicação desenvolvida em Python utilizando a biblioteca St
 Acesse [Magic App](https://magicapp-35helmd6kwtp7zkhpeqxg8.streamlit.app/)
 
 ## Autor
-Este aplicativo foi criado por Gustavo Correa. Para mais informações, visite [meu github](https://github.com/gusascorrea) ou [meu linkedin](www.linkedin.com/in/gustavo-correa--).
+Este aplicativo foi criado por Gustavo Correa. Para mais informações, visite [meu github](https://github.com/gusascorrea) ou [meu linkedin](https://linkedin.com/in/gustavo-correa--).
 
 ## Referências
 - ROMAN, Gabriel. Avaliação da Eficiência da Magic Formula e de Estratégias de Value Investing para o Mercado Brasileiro. Porto Alegre: UFRGS, 2021.
