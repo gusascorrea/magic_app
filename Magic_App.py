@@ -434,7 +434,7 @@ def references():
 def references_eng():
     st.sidebar.markdown('---')
     st.sidebar.subheader('References:')
-    st.sidebar.write('ROMAN, Gabriel. Avaliação da Eficiência da Magic Formula e de Estratégias de Value Investing para o Mercado Brasileiro. Porto Alegre: UFRGS, 2021.')
+    st.sidebar.write('ROMAN, Gabriel. Evaluation of the Efficiency of the Magic Formula and Value Investing Strategies for the Brazilian Market. Porto Alegre: UFRGS, 2021.')
     st.sidebar.download_button(label="Download PDF", data='references/TCC Magic Formula.pdf', file_name="TCC_Magic_Formula.pdf", mime="application/pdf")
     st.sidebar.markdown('Magic Formula for the US market: [Site Magic Formula](https://www.magicformulainvesting.com/)')
     st.sidebar.markdown('Source of data: [API of Fundamentus website](https://pypi.org/project/fundamentus/)')
