@@ -1,24 +1,24 @@
-# Magic Formula and Value Investing Dashboard
+# Magic App
 
-This dashboard application provides insights and tools for implementing the Magic Formula and Value Investing strategy. The Magic Formula, developed by Joel Greenblatt, selects stocks based on high Return on Invested Capital (ROIC) and Earnings Yield, representing quality and value, respectively, measured by accounting-based indicators for companies.
+## Descrição
+O Magic App é uma aplicação desenvolvida em Python utilizando a biblioteca Streamlit. A aplicação tem como objetivo informar, capacitar e facilitar o usuário a selecionar ações de forma eficiente e eficaz, baseando-se em estratégias de Value Investing.
 
-## Overview
-The dashboard consists of three main panels:
+## Funcionalidades
+- **Início:** Apresenta uma visão geral do objetivo e da estratégia por trás do aplicativo.
+- **Estudo:** Apresenta resultados de um estudo sobre estratégias de Value Investing, incluindo retornos anuais, volatilidade, e dados de performance.
+- **Lista de Ações:** Permite ao usuário selecionar uma estratégia de investimento (Earnings Yield, Magic Formula, ou ROIC) e ver uma lista de ações recomendadas com base nessa estratégia.
+- **Rebalanceamento:** Esta funcionalidade ainda não está implementada, mas será utilizada para facilitar o processo de rebalanceamento da carteira de investimentos.
 
-1. **Magic Formula and Value Investing**: Provides an explanation of the strategy along with visual representations of annual returns, volatility, and performance data.
-2. **List of Stocks**: Allows users to select a strategy (Earnings Yield, Magic Formula, or ROIC), specify the number of stocks in the portfolio, investment amount, and liquidity filter. It then displays a list of recommended stocks based on the chosen strategy.
+## Como Executar
+Acesse [Magic App](https://magicapp-35helmd6kwtp7zkhpeqxg8.streamlit.app/)
 
-## Usage
-To use the dashboard:
+## Autor
+Este aplicativo foi criado por Gustavo Correa. Para mais informações, visite [meu github](https://github.com/gusascorrea) ou [meu linkedin](www.linkedin.com/in/gustavo-correa--).
 
-1. Choose your preferred language (English or Portuguese) from the sidebar.
-2. Navigate through the different panels using the sidebar options.
+## Referências
+- ROMAN, Gabriel. Avaliação da Eficiência da Magic Formula e de Estratégias de Value Investing para o Mercado Brasileiro. Porto Alegre: UFRGS, 2021.
+- Magic Formula para o mercado americano: [Site Magic Formula](https://www.magicformulainvesting.com/)
+- Fonte de dados: [API do site Fundamentus](https://pypi.org/project/fundamentus/)
 
-## How to Run
-The application is available online at [Magic Formula and Value Investing Dashboard](https://magicapp-35helmd6kwtp7zkhpeqxg8.streamlit.app/). Simply click the link to access the dashboard and explore its features.
-
-## References
-- ROMAN, Gabriel. *Avaliação da Eficiência da Magic Formula e de Estratégias de Value Investing para o Mercado Brasileiro*. Porto Alegre: UFRGS, 2021. [Download PDF](references/TCC_Magic_Formula.pdf)
-- ZEIDLER, Rodolfo Gunther Dias. *Eficiência da Magic Formula de Value Investing no Mercado Brasileiro*. São Paulo: FGV, 2014. [Download PDF](references/FGV_Magic_Formula.pdf)
-
-Feel free to explore the dashboard and customize it according to your needs!
+## Disclaimer
+Esta aplicação não possui caráter de recomendação de investimento, somente informativo. A decisão de investimento deve ser tomada individualmente pelo usuário que utiliza dessas informações.
