@@ -26,7 +26,7 @@ def homepage():
                 o usuário a selecionar ações de forma eficiente e eficaz. A técnica abordada torna objetivo \
                 o processo de decisão de compra e venda, com risco abaixo do risco médio do mercado (em nosso caso, o Ibovespa) e retornos \
                 consistentemente superiores.')
-    st.write('**Disclaimer: esta aplicação não possui caráter de recomendação de investimento, somente informativo.\
+    st.write('**Aviso Legal: esta aplicação não possui caráter de recomendação de investimento, somente informativo.\
               A decisão de investimento deve ser tomada individualmente pelo usuário que utiliza dessas informações.**')
 
     st.markdown('---')
