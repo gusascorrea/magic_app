@@ -5,14 +5,14 @@ import os
 
 def carregar_estado_anterior():
     """Carrega o estado anterior da carteira, se existir."""
-    if os.path.exists('carteira_anterior.csv'):
-        return pd.read_csv('carteira_anterior.csv', index_col=0)
+    if os.path.exists('data/carteira_anterior.csv'):
+        return pd.read_csv('data/carteira_anterior.csv', index_col=0)
     else:
         return pd.DataFrame()
 
 def salvar_novo_estado(nova_carteira):
     """Salva o estado atual da carteira."""
-    nova_carteira.to_csv('carteira_anterior.csv')
+    nova_carteira.to_csv('data/carteira_anterior.csv')
 
 def performance():
 
@@ -108,11 +108,11 @@ def performance():
 
                 # Salvar a performance
                 try:
-                    performance_anterior = pd.read_csv('performance.csv')
+                    performance_anterior = pd.read_csv('data/performance.csv')
                     performance_final = pd.concat([performance_anterior, sorted_df])
-                    performance_final.to_csv('performance.csv', index=False)
+                    performance_final.to_csv('data/performance.csv', index=False)
                 except:
-                    sorted_df.to_csv('performance.csv', index=False)
+                    sorted_df.to_csv('data/performance.csv', index=False)
 
                 # Atualizar o estado anterior
                 salvar_novo_estado(sorted_df)
