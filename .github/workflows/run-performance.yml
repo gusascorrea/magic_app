@@ -6,6 +6,9 @@ on:
   #schedule:
   #  - cron: '0 0 * * 1'  # Executa toda segunda-feira à meia-noite UTC
 
+permissions:
+  contents: write
+
 jobs:
   run-performance:
     runs-on: ubuntu-latest
