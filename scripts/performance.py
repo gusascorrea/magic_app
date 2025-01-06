@@ -109,12 +109,11 @@ def performance():
                 # Salvar a performance
                 try:
                     performance_anterior = pd.read_csv('data/performance.csv')
+                    # buscar ativos na data mais recente de performance_anterior que não estão em sorted_df
+
                     performance_final = pd.concat([performance_anterior, sorted_df])
                     performance_final.to_csv('data/performance.csv', index=False)
                 except:
                     sorted_df.to_csv('data/performance.csv', index=False)
-
-                # Atualizar o estado anterior
-                salvar_novo_estado(sorted_df)
 
 performance()
