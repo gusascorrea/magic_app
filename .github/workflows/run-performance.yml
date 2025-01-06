@@ -32,7 +32,7 @@ jobs:
 
       # 4. Executar o script
       - name: Executar o script Python
-        run: python performance.py
+        run: python scripts/performance.py
 
       # 5. Salvar arquivos de saída como artefatos
       - name: Armazenar os resultados
