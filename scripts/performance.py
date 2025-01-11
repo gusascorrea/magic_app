@@ -26,6 +26,9 @@ def performance():
     # Carrega o estado anterior
     performance = carregar_estado_anterior()
 
+    print("Última data:", performance["Data"].max())
+    print("Data atual:", pd.to_datetime("today").date())
+
     if performance["Data"].max() == pd.to_datetime("today").date():
         print("Dados já atualizados")
 
