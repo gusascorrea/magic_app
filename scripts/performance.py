@@ -1,8 +1,11 @@
 import os
+import warnings
 
 import fundamentus as fd
 import numpy as np
 import pandas as pd
+
+warnings.filterwarnings("ignore")
 
 
 def carregar_estado_anterior():
@@ -126,13 +129,15 @@ def performance():
 
                 # Salvar a performance
                 try:
-                    performance_anterior = pd.read_csv("data/performance.csv")
+                    performance_anterior = pd.read_csv(
+                        "data/performance.csv", index_col=0
+                    )
                     # buscar ativos na data mais recente de performance_anterior que não estão em sorted_df
 
                     performance_final = pd.concat([performance_anterior, sorted_df])
-                    performance_final.to_csv("data/performance.csv", index=False)
+                    performance_final.to_csv("data/performance.csv")
                 except:
-                    sorted_df.to_csv("data/performance.csv", index=False)
+                    sorted_df.to_csv("data/performance.csv")
 
 
 performance()
