@@ -26,7 +26,7 @@ def performance():
     # Carrega o estado anterior
     performance = carregar_estado_anterior()
 
-    if performance["Data"].max == pd.to_datetime("today").date():
+    if performance["Data"].max() == pd.to_datetime("today").date():
         print("Dados já atualizados")
 
     else:
@@ -37,13 +37,6 @@ def performance():
         for estrategia in estrategias:
             for ativos_na_carteira in combinacao_ativos_na_carteira:
                 for vol_min in volumes:
-
-                    carteira_anterior = performance[
-                        (performance["Estratégia"] == estrategia)
-                        & (performance["Ativos na Carteira"] == ativos_na_carteira)
-                        & (performance["Volume Mínimo"] == vol_min)
-                        & (performance["Data"] == performance["Data"].max())
-                    ].drop_duplicates()
 
                     # Cópia dos dados
                     df = requisicao.copy(deep=True)
@@ -110,8 +103,12 @@ def performance():
                     )
                     sorted_df["Valor"] = sorted_df["Quantidade"] * sorted_df["Cotação"]
 
-                    ind1 = sorted_df.shape[0]
-                    ind2 = carteira_anterior.shape[0]
+                    carteira_anterior = performance[
+                        (performance["Estratégia"] == estrategia)
+                        & (performance["Ativos na Carteira"] == ativos_na_carteira)
+                        & (performance["Volume Mínimo"] == vol_min)
+                        & (performance["Data"] == performance["Data"].max())
+                    ].drop_duplicates()
 
                     # Identificar entradas e saídas
                     ativos_atuais = set(sorted_df.index)
