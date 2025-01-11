@@ -41,7 +41,6 @@ jobs:
           name: resultados-performance
           path: |
             data/performance.csv
-            data/carteira_anterior.csv
 
       # 6. (Opcional) Commitar mudanças no repositório
       - name: Commitar resultados no repositório
