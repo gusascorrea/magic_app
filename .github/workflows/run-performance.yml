@@ -47,6 +47,6 @@ jobs:
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/performance.csv data/carteira_anterior.csv
+          git add data/performance.csv
           git commit -m "Atualizar resultados do script de performance" || echo "Nenhuma mudança para commitar"
           git push
