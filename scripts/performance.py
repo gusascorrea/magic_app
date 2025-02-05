@@ -83,11 +83,83 @@ def performance():
                         by=["ROIC", "Liq.2meses"], ascending=[False, False]
                     )
 
+                # Seleção dos ativos
                 sorted_df = sorted_df.head(ativos_na_carteira)
-                sorted_df["Quantidade"] = (
-                    valor_total / ativos_na_carteira
-                ) / sorted_df["Cotação"]
-                sorted_df["Quantidade"] = sorted_df["Quantidade"].round(0)
+                sorted_df["Quantidade"] = round(
+                    (valor_total / ativos_na_carteira) / sorted_df["Cotação"], 0
+                )
+                sorted_df["Valor"] = sorted_df["Quantidade"] * sorted_df["Cotação"]
+                if not performance.empty:
+                    carteira_anterior = performance[
+                        (performance["Estratégia"] == estrategia)
+                        & (performance["Ativos na Carteira"] == ativos_na_carteira)
+                        & (performance["Volume Mínimo"] == vol_min)
+                        & (performance["Data"] == performance["Data"].max())
+                    ].drop_duplicates()
+                    # Identificar entradas e saídas
+                    ativos_atuais = set(sorted_df.index)
+                    if not carteira_anterior.empty:
+                        ativos_anteriores = set(carteira_anterior.index)
+                        vendidos = carteira_anterior.loc[
+                            ~carteira_anterior.index.isin(ativos_atuais)
+                        ]
+                        comprados = carteira_anterior.loc[
+                            carteira_anterior.index.isin(ativos_atuais)
+                        ]
+                        comprados.drop(columns=["Cotação"], inplace=True)
+                        # calcula novo valor de ativos comprados
+                        comprados = comprados.merge(
+                            sorted_df[["Cotação"]],
+                            left_index=True,
+                            right_index=True,
+                            how="left",
+                        )
+                        comprados["Valor"] = (
+                            comprados["Cotação"] * comprados["Quantidade"]
+                        )
+                        valor_comprado = comprados["Valor"].sum()
+                        if len(vendidos) > 0:
+                            # calcula valor vendido de ativos vendidos
+                            vendidos.drop(columns=["Cotação"], inplace=True)
+                            vendidos = vendidos.merge(
+                                sorted_df[["Cotação"]],
+                                left_index=True,
+                                right_index=True,
+                                how="left",
+                            )
+                            vendidos["Valor"] = (
+                                vendidos["Cotação"] * vendidos["Quantidade"]
+                            )
+                            valor_vendido = vendidos["Valor"].sum()
+                            # Calcular quantidade de novos ativos comprados
+                            sorted_df["Quantidade"] = np.where(
+                                ~sorted_df.index.isin(vendidos),
+                                round(
+                                    (valor_vendido / len(vendidos))
+                                    / sorted_df["Cotação"],
+                                    0,
+                                ),
+                                0,
+                            )
+                        sorted_df = sorted_df.merge(
+                            comprados[["Quantidade"]],
+                            left_index=True,
+                            right_index=True,
+                            how="left",
+                        )
+                        sorted_df["Quantidade"] = (
+                            sorted_df["Quantidade_x"] + sorted_df["Quantidade_y"]
+                        )
+                        sorted_df.drop(
+                            columns=["Quantidade_x", "Quantidade_y"],
+                            inplace=True,
+                        )
+                        sorted_df["Valor"] = (
+                            sorted_df["Quantidade"] * sorted_df["Cotação"]
+                        )
+                        valor_total_atualizado = sorted_df["Valor"].sum()
+                    else:
+                        valor_total_atualizado = valor_total
                 sorted_df["Valor"] = sorted_df["Quantidade"] * sorted_df["Cotação"]
 
                 # Adicionar metadados
