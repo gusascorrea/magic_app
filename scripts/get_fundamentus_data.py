@@ -19,6 +19,9 @@ data['ticker'] = data.index
 # drop duplicates
 data.drop_duplicates(subset = ['ticker','update date'], keep = 'last', inplace = True)
 
+# print len of new data not in previous data
+print('Novos dados:',len(data) - len(previous_data))
+
 # drop ticker column
 data.drop(columns = 'ticker', inplace = True)
 
