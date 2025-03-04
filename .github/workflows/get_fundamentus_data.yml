@@ -1,10 +1,10 @@
-name: Executar Script de Performance
+name: Buscar Dados da Fundamentus
 
 on:
   #workflow_dispatch:  # Permite execução manual
-  #push:
+  push:
   schedule:
-    - cron: '0 4,16 * * *'
+    - cron: '0 3,15 * * *'
 
 permissions:
   contents: write
@@ -32,7 +32,7 @@ jobs:
 
       # 4. Executar o script
       - name: Executar o script Python
-        run: python scripts/performance.py
+        run: python -m scripts.get_fundamentus_data
 
       # 5. Salvar arquivos de saída como artefatos
       - name: Armazenar os resultados
@@ -40,13 +40,13 @@ jobs:
         with:
           name: resultados-performance
           path: |
-            data/performance.csv
+            data/fundamentus_data.parquet
 
       # 6. (Opcional) Commitar mudanças no repositório
       - name: Commitar resultados no repositório
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/performance.csv
-          git commit -m "Atualizar resultados do script de performance" || echo "Nenhuma mudança para commitar"
+          git add data/fundamentus_data.parquet
+          git commit -m "Dados da Fundamentus Atualizados" || echo "Nenhuma mudança para commitar"
           git push
