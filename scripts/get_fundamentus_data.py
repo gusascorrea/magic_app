@@ -3,6 +3,7 @@ import warnings
 
 import fundamentus as fd
 import fundamentus.detalhes as fd_detalhes
+import numpy as np
 import pandas as pd
 from pandas.io.html import read_html as pandas_read_html
 
@@ -22,6 +23,12 @@ def safe_div(numerator, denominator):
     return numerator.divide(denominator)
 
 
+def col_or_na(df, column):
+    if column in df.columns:
+        return df[column]
+    return pd.Series(np.nan, index=df.index, dtype="float64")
+
+
 def build_transformed_data(raw_data):
     fd_detalhes.pd.read_html = _read_html_lxml
 
@@ -32,7 +39,11 @@ def build_transformed_data(raw_data):
     for i, papel in enumerate(raw_data.index, start=1):
         print(f"Progresso: {i}/{total_tickers} | Papel: {papel}", end="\r", flush=True)
         try:
-            detailed_frames.append(fd.get_papel(papel))
+            result = fd.get_papel(papel)
+            if isinstance(result, pd.DataFrame) and not result.empty:
+                detailed_frames.append(result)
+            else:
+                failed_tickers.append((papel, "resultado vazio ou invalido"))
         except Exception as exc:
             failed_tickers.append((papel, str(exc)))
 
@@ -73,56 +84,56 @@ def build_transformed_data(raw_data):
     )
 
     transformed_data = pd.DataFrame(index=detailed_data.index)
-    transformed_data["Cotação"] = detailed_data["Cotacao"]
+    transformed_data["Cotação"] = col_or_na(detailed_data, "Cotacao")
     transformed_data["P/L"] = safe_div(
-        detailed_data["Valor_de_mercado"],
-        detailed_data["Lucro_Liquido_12m"],
+        col_or_na(detailed_data, "Valor_de_mercado"),
+        col_or_na(detailed_data, "Lucro_Liquido_12m"),
     )
     transformed_data["P/VP"] = safe_div(
-        detailed_data["Valor_de_mercado"],
-        detailed_data["Patrim_Liq"],
+        col_or_na(detailed_data, "Valor_de_mercado"),
+        col_or_na(detailed_data, "Patrim_Liq"),
     )
     transformed_data["PSR"] = safe_div(
-        detailed_data["Valor_de_mercado"],
-        detailed_data["Receita_Liquida_12m"],
+        col_or_na(detailed_data, "Valor_de_mercado"),
+        col_or_na(detailed_data, "Receita_Liquida_12m"),
     )
-    transformed_data["Div.Yield"] = detailed_data["Div_Yield"]
+    transformed_data["Div.Yield"] = col_or_na(detailed_data, "Div_Yield")
     transformed_data["P/Ativo"] = safe_div(
-        detailed_data["Valor_de_mercado"],
-        detailed_data["Ativo"],
+        col_or_na(detailed_data, "Valor_de_mercado"),
+        col_or_na(detailed_data, "Ativo"),
     )
-    transformed_data["P/Cap.Giro"] = detailed_data["PCap_Giro"]
+    transformed_data["P/Cap.Giro"] = col_or_na(detailed_data, "PCap_Giro")
     transformed_data["P/EBIT"] = safe_div(
-        detailed_data["Valor_de_mercado"],
-        detailed_data["EBIT_12m"],
+        col_or_na(detailed_data, "Valor_de_mercado"),
+        col_or_na(detailed_data, "EBIT_12m"),
     )
-    transformed_data["P/Ativ Circ.Liq"] = detailed_data["PAtiv_Circ_Liq"]
+    transformed_data["P/Ativ Circ.Liq"] = col_or_na(detailed_data, "PAtiv_Circ_Liq")
     transformed_data["EV/EBIT"] = safe_div(
-        detailed_data["Valor_da_firma"],
-        detailed_data["EBIT_12m"],
+        col_or_na(detailed_data, "Valor_da_firma"),
+        col_or_na(detailed_data, "EBIT_12m"),
     )
-    transformed_data["EV/EBITDA"] = detailed_data["EV_EBITDA"]
+    transformed_data["EV/EBITDA"] = col_or_na(detailed_data, "EV_EBITDA")
     transformed_data["Mrg Ebit"] = safe_div(
-        detailed_data["EBIT_12m"],
-        detailed_data["Receita_Liquida_12m"],
+        col_or_na(detailed_data, "EBIT_12m"),
+        col_or_na(detailed_data, "Receita_Liquida_12m"),
     )
     transformed_data["Mrg. Líq."] = safe_div(
-        detailed_data["Lucro_Liquido_12m"],
-        detailed_data["Receita_Liquida_12m"],
+        col_or_na(detailed_data, "Lucro_Liquido_12m"),
+        col_or_na(detailed_data, "Receita_Liquida_12m"),
     )
-    transformed_data["Liq. Corr."] = detailed_data["Liquidez_Corr"]
-    transformed_data["ROIC"] = detailed_data["ROIC"]
+    transformed_data["Liq. Corr."] = col_or_na(detailed_data, "Liquidez_Corr")
+    transformed_data["ROIC"] = col_or_na(detailed_data, "ROIC")
     transformed_data["ROE"] = safe_div(
-        detailed_data["Lucro_Liquido_12m"],
-        detailed_data["Patrim_Liq"],
+        col_or_na(detailed_data, "Lucro_Liquido_12m"),
+        col_or_na(detailed_data, "Patrim_Liq"),
     )
-    transformed_data["Liq.2meses"] = detailed_data["Vol_med_2m"]
-    transformed_data["Patrim. Líq"] = detailed_data["Patrim_Liq"]
+    transformed_data["Liq.2meses"] = col_or_na(detailed_data, "Vol_med_2m")
+    transformed_data["Patrim. Líq"] = col_or_na(detailed_data, "Patrim_Liq")
     transformed_data["Dív.Brut/ Patrim."] = safe_div(
-        detailed_data["Div_Bruta"],
-        detailed_data["Patrim_Liq"],
+        col_or_na(detailed_data, "Div_Bruta"),
+        col_or_na(detailed_data, "Patrim_Liq"),
     )
-    transformed_data["Cresc. Rec.5a"] = detailed_data["Cres_Rec_5a"]
+    transformed_data["Cresc. Rec.5a"] = col_or_na(detailed_data, "Cres_Rec_5a")
     transformed_data = transformed_data.reindex(columns=raw_data.columns)
 
     print(f"\nProgresso: {total_tickers}/{total_tickers} | Concluido")
