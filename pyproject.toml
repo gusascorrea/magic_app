@@ -13,9 +13,10 @@ isort = "^5.13.2"
 taskipy = "^1.14.1"
 pre-commit = "^4.0.1"
 pandas = "^2.2.3"
-fundamentus = "^0.2.0"
+fundamentus = "^0.3.2"
 ipykernel = "^6.29.5"
 pyarrow = "^19.0.1"
+matplotlib = "^3.10.8"
 
 
 [build-system]
