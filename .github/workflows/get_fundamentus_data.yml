@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  run-performance:
+  get_fundamentus_data:
     runs-on: ubuntu-latest
 
     steps:
