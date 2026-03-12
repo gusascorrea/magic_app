@@ -13,6 +13,8 @@ fi
 
 python -m scripts.get_fundamentus_data
 
+python -m scripts.performance
+
 git add .
 git diff --cached --quiet && exit 0
 
