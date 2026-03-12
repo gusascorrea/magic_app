@@ -81,8 +81,13 @@ def fetch_resultado_raw() -> pd.DataFrame:
         except Exception as exc:
             last_error = exc
 
+    if last_error is None:
+        raise RuntimeError(
+            "Nao foi possivel obter a tabela do Fundamentus em nenhum endpoint."
+        )
+
     raise RuntimeError(
-        "Nao foi possivel obter a tabela do Fundamentus em nenhum endpoint."
+        f"Nao foi possivel obter a tabela do Fundamentus em nenhum endpoint. {last_error}"
     ) from last_error
 
 
