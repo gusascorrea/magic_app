@@ -71,3 +71,4 @@ git commit -m "Dados da Fundamentus atualizados"
 git push
 
 echo "Atualizacao concluida"
+echo "#################################"
