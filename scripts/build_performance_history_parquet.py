@@ -7,7 +7,7 @@ import pandas as pd
 
 """
 run:
-/home/gus/.cache/pypoetry/virtualenvs/magic-app-X1JMDIUZ-py3.12/bin/python scripts/build_performance_history_parquet.py --since "2026-03-10 00:00:00"
+poetry run python scripts/build_performance_history_parquet.py --since "2026-03-10 00:00:00"
 """
 
 
