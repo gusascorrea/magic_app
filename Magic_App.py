@@ -3,6 +3,8 @@ import fundamentus as fd
 import numpy as np
 import pandas as pd
 import streamlit as st
+import re
+import unicodedata
 from pathlib import Path
 
 
@@ -19,11 +21,34 @@ REALLOCATION_FREQUENCIES = {"mensal": 1, "trimestral": 3, "anual": 12}
 LIVE_ANALYSIS_START = pd.Timestamp("2026-03-12")
 
 
+def _to_snake_case(value):
+    text = str(value).strip()
+    normalized = unicodedata.normalize("NFKD", text)
+    ascii_text = normalized.encode("ascii", "ignore").decode("ascii")
+    snake_text = re.sub(r"[^0-9a-zA-Z]+", "_", ascii_text).strip("_").lower()
+    return snake_text or text
+
+
 def _prepare_streamlit_dataframe(df):
     prepared = df.copy()
     for column in prepared.columns:
         if pd.api.types.is_object_dtype(prepared[column]):
             prepared[column] = prepared[column].astype("string")
+    return prepared
+
+
+def _prepare_snake_case_table(df):
+    prepared = _prepare_streamlit_dataframe(df.copy())
+    prepared.columns = [_to_snake_case(column) for column in prepared.columns]
+
+    if not isinstance(prepared.index, pd.RangeIndex):
+        prepared.index = [
+            _to_snake_case(index)
+            if isinstance(index, str) and not re.fullmatch(r"[A-Z0-9]+", index)
+            else index
+            for index in prepared.index
+        ]
+
     return prepared
 
 
@@ -630,19 +655,19 @@ def live_study():
     st.subheader("Dados de Performance")
     st.write("Melhor configuração consolidada")
     st.dataframe(
-        _prepare_streamlit_dataframe(best_configuration.to_frame(name="valor")),
+        _prepare_snake_case_table(best_configuration.to_frame(name="valor")),
         width="stretch",
     )
 
     st.write("Pior configuração consolidada")
     st.dataframe(
-        _prepare_streamlit_dataframe(worst_configuration.to_frame(name="valor")),
+        _prepare_snake_case_table(worst_configuration.to_frame(name="valor")),
         width="stretch",
     )
 
     st.write("Top 10 configurações por retorno médio")
     st.dataframe(
-        _prepare_streamlit_dataframe(
+        _prepare_snake_case_table(
             configuration_summary[
                 [
                     "Estratégia",
@@ -948,6 +973,7 @@ def stock_list():
         # fora da coluna valor, Total retorna '-'
         sorted_df.loc["Total", ["Cotação", "ROIC", "Liq.2meses", "Quantidade"]] = "-"
 
+    sorted_df = _prepare_snake_case_table(sorted_df)
     st.table(sorted_df.style.format(precision=2))
 
 
@@ -1117,6 +1143,7 @@ def stock_list_eng():
         # fora da coluna valor, Total retorna '-'
         sorted_df.loc["Total", ["Cotação", "ROIC", "Liq.2meses", "Quantidade"]] = "-"
 
+    sorted_df = _prepare_snake_case_table(sorted_df)
     st.table(sorted_df.style.format(precision=2))
 
 
