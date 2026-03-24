@@ -19,6 +19,12 @@ PORTFOLIO_KEYS = ["Estratégia", "Volume Mínimo", "Ativos na Carteira"]
 ROW_KEYS = PORTFOLIO_KEYS + ["Data", "papel"]
 REALLOCATION_FREQUENCIES = {"mensal": 1, "trimestral": 3, "anual": 12}
 LIVE_ANALYSIS_START = pd.Timestamp("2026-03-12")
+BENCHMARK_LABELS = {
+    "ibov_close": "IBOV",
+    "cdi_rate_aa": "CDI",
+    "sp500_close": "S&P500",
+    "bitcoin_close": "Bitcoin",
+}
 
 
 def _to_snake_case(value):
@@ -162,7 +168,7 @@ def load_live_benchmark_history():
 
     df = pd.read_parquet(BENCHMARK_HISTORY_PATH)
     df["Data"] = pd.to_datetime(df["Data"])
-    for column in ["ibov_close", "cdi_rate_aa"]:
+    for column in BENCHMARK_LABELS:
         if column in df.columns:
             df[column] = pd.to_numeric(df[column], errors="coerce")
     return df.sort_values("Data").drop_duplicates(subset=["Data"], keep="last").reset_index(
@@ -187,26 +193,21 @@ def build_live_benchmark_chart(chart_dates):
         benchmark_history = benchmark_history.set_index("Data").sort_index()
         benchmark_series = {}
 
-        ibov_series = (
-            benchmark_history["ibov_close"]
-            .reindex(chart_index)
-            .ffill()
-            .dropna()
-        )
-        if not ibov_series.empty:
-            benchmark_series["IBOV"] = (ibov_series / ibov_series.iloc[0]) * 100
+        for column, label in BENCHMARK_LABELS.items():
+            if column not in benchmark_history.columns:
+                continue
 
-        cdi_series = (
-            benchmark_history["cdi_rate_aa"]
-            .reindex(chart_index)
-            .ffill()
-            .dropna()
-        )
-        if not cdi_series.empty:
-            daily_factor = (1 + (cdi_series / 100)) ** (1 / 252)
-            benchmark_series["CDI"] = 100 * (
-                daily_factor.cumprod() / daily_factor.iloc[0]
-            )
+            series = benchmark_history[column].reindex(chart_index).ffill().dropna()
+            if series.empty:
+                continue
+
+            if column == "cdi_rate_aa":
+                daily_factor = (1 + (series / 100)) ** (1 / 252)
+                benchmark_series[label] = 100 * (
+                    daily_factor.cumprod() / daily_factor.iloc[0]
+                )
+            else:
+                benchmark_series[label] = (series / series.iloc[0]) * 100
 
         benchmark_chart = pd.DataFrame(benchmark_series, index=chart_index)
         if benchmark_chart.empty:
