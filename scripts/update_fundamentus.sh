@@ -8,6 +8,10 @@ LOG_FILE="${LOG_DIR}/fundamentus.log"
 
 cd "${REPO_ROOT}"
 
+if [[ -f "${REPO_ROOT}/http_cache.sqlite" ]]; then
+  rm "${REPO_ROOT}/http_cache.sqlite"
+fi
+
 mkdir -p "${LOG_DIR}"
 
 timestamp_output() {
