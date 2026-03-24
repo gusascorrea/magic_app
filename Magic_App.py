@@ -2,6 +2,298 @@ import fundamentus as fd
 import numpy as np
 import pandas as pd
 import streamlit as st
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parent
+PERFORMANCE_HISTORY_PATH = (
+    REPO_ROOT / "data" / "performance_committed_since_2026-03-10.parquet"
+)
+QUOTE_HISTORY_PATH = REPO_ROOT / "data" / "fundamentus_data.parquet"
+INITIAL_CAPITAL = 100000.0
+PORTFOLIO_KEYS = ["Estratégia", "Volume Mínimo", "Ativos na Carteira"]
+ROW_KEYS = PORTFOLIO_KEYS + ["Data", "papel"]
+REALLOCATION_FREQUENCIES = {"mensal": 1, "trimestral": 3, "anual": 12}
+LIVE_ANALYSIS_START = pd.Timestamp("2026-03-12")
+
+
+@st.cache_data(show_spinner=False)
+def load_live_portfolio_history():
+    if not PERFORMANCE_HISTORY_PATH.exists():
+        raise FileNotFoundError(f"Arquivo não encontrado: {PERFORMANCE_HISTORY_PATH}")
+
+    df = pd.read_parquet(PERFORMANCE_HISTORY_PATH)
+    df["Data"] = pd.to_datetime(df["Data"])
+    df["commit_committed_at"] = pd.to_datetime(df["commit_committed_at"], utc=True)
+    return (
+        df.sort_values("commit_committed_at")
+        .drop_duplicates(subset=ROW_KEYS, keep="last")
+        .sort_values(PORTFOLIO_KEYS + ["Data", "papel"])
+        .reset_index(drop=True)
+    )
+
+
+@st.cache_data(show_spinner=False)
+def load_live_quote_history():
+    if not QUOTE_HISTORY_PATH.exists():
+        raise FileNotFoundError(f"Arquivo não encontrado: {QUOTE_HISTORY_PATH}")
+
+    df = pd.read_parquet(QUOTE_HISTORY_PATH)
+    if "papel" not in df.columns:
+        df = df.reset_index(names="papel")
+    df = df.rename(columns={"update date": "Data"})
+    df["Data"] = pd.to_datetime(df["Data"])
+    df["Cotação"] = pd.to_numeric(df["Cotação"], errors="coerce")
+    return (
+        df[["papel", "Data", "Cotação"]]
+        .dropna(subset=["papel", "Data"])
+        .sort_values(["papel", "Data"])
+        .reset_index(drop=True)
+    )
+
+
+def _get_effective_start_date(requested_date, available_dates):
+    for snapshot_date in available_dates:
+        if snapshot_date >= requested_date:
+            return snapshot_date
+    return None
+
+
+def _compute_rebalance_dates(start_date, end_date, months, available_dates):
+    rebalance_dates = []
+    target_date = start_date + pd.DateOffset(months=months)
+
+    while target_date <= end_date:
+        valid_dates = [
+            snapshot_date
+            for snapshot_date in available_dates
+            if snapshot_date >= target_date and snapshot_date <= end_date
+        ]
+        if not valid_dates:
+            break
+        actual_date = valid_dates[0]
+        rebalance_dates.append(actual_date)
+        target_date = actual_date + pd.DateOffset(months=months)
+
+    return rebalance_dates
+
+
+def _safe_ratio(return_value, drawdown_value):
+    if drawdown_value == 0 and return_value > 0:
+        return float("inf")
+    if drawdown_value == 0:
+        return 0.0
+    return return_value / abs(drawdown_value)
+
+
+def _build_config_label(row):
+    return (
+        f"{row['Estratégia']} | vol {int(row['Volume Mínimo'])}"
+        f" | {int(row['Ativos na Carteira'])} ativos"
+        f" | {row['frequencia_realocacao']}"
+    )
+
+
+@st.cache_data(show_spinner=False)
+def build_live_reallocation_analysis():
+    portfolio_history = load_live_portfolio_history()
+    quote_history = load_live_quote_history()
+    quote_matrix = (
+        quote_history.pivot_table(
+            index="Data",
+            columns="papel",
+            values="Cotação",
+            aggfunc="last",
+        )
+        .sort_index()
+        .ffill()
+    )
+
+    available_snapshot_dates = sorted(portfolio_history["Data"].unique())
+    requested_start_dates = pd.date_range(
+        LIVE_ANALYSIS_START, max(available_snapshot_dates), freq="D"
+    )
+    latest_quote_date = quote_matrix.index.max()
+
+    simulation_rows = []
+    history_frames = []
+
+    for key_values, portfolio_df in portfolio_history.groupby(PORTFOLIO_KEYS, dropna=False):
+        key_dict = dict(zip(PORTFOLIO_KEYS, key_values))
+        holdings_by_date = {
+            date: sorted(group["papel"].tolist())
+            for date, group in portfolio_df.groupby("Data")
+        }
+
+        for requested_start_date in requested_start_dates:
+            effective_start_date = _get_effective_start_date(
+                requested_start_date, available_snapshot_dates
+            )
+            if effective_start_date is None or effective_start_date not in holdings_by_date:
+                continue
+
+            start_holdings = holdings_by_date[effective_start_date]
+            start_prices = quote_matrix.loc[effective_start_date, start_holdings].dropna()
+            if len(start_prices) != len(start_holdings):
+                continue
+
+            for frequency_name, months in REALLOCATION_FREQUENCIES.items():
+                quantities = {
+                    paper: round(
+                        (INITIAL_CAPITAL / len(start_holdings)) / start_prices[paper], 0
+                    )
+                    for paper in start_holdings
+                }
+                current_holdings = start_holdings.copy()
+                rebalance_dates = _compute_rebalance_dates(
+                    effective_start_date,
+                    latest_quote_date,
+                    months,
+                    available_snapshot_dates,
+                )
+                rebalance_date_set = set(rebalance_dates)
+                total_entries = 0
+                total_exits = 0
+                total_swaps = 0
+                history_rows = []
+
+                for day in quote_matrix.index[quote_matrix.index >= effective_start_date]:
+                    if day in rebalance_date_set:
+                        target_holdings = holdings_by_date.get(day)
+                        if target_holdings is not None:
+                            current_set = set(current_holdings)
+                            target_set = set(target_holdings)
+                            exits = sorted(current_set - target_set)
+                            entries = sorted(target_set - current_set)
+                            current_value = 0.0
+
+                            for paper, quantity in quantities.items():
+                                price = quote_matrix.at[day, paper]
+                                current_value += quantity * (
+                                    0.0 if pd.isna(price) else float(price)
+                                )
+
+                            target_prices = quote_matrix.loc[day, target_holdings].dropna()
+                            if len(target_prices) == len(target_holdings):
+                                quantities = {
+                                    paper: round(
+                                        (current_value / len(target_holdings))
+                                        / target_prices[paper],
+                                        0,
+                                    )
+                                    for paper in target_holdings
+                                }
+                                current_holdings = target_holdings.copy()
+                                total_entries += len(entries)
+                                total_exits += len(exits)
+                                total_swaps += max(len(entries), len(exits))
+
+                    portfolio_value = 0.0
+                    for paper, quantity in quantities.items():
+                        price = quote_matrix.at[day, paper]
+                        portfolio_value += quantity * (
+                            0.0 if pd.isna(price) else float(price)
+                        )
+
+                    history_rows.append(
+                        {
+                            "Data": day,
+                            "valor_carteira": portfolio_value,
+                            "data_inicio_solicitada": requested_start_date,
+                            "data_inicio_efetiva": effective_start_date,
+                            "frequencia_realocacao": frequency_name,
+                            **key_dict,
+                        }
+                    )
+
+                history = pd.DataFrame(history_rows)
+                history["retorno_diario"] = history["valor_carteira"].pct_change()
+                history["pico"] = history["valor_carteira"].cummax()
+                history["drawdown"] = history["valor_carteira"] / history["pico"] - 1
+                history["retorno_acumulado"] = (
+                    history["valor_carteira"] / INITIAL_CAPITAL - 1
+                )
+                history_frames.append(history)
+
+                simulation_rows.append(
+                    {
+                        **key_dict,
+                        "data_inicio_solicitada": requested_start_date,
+                        "data_inicio_efetiva": effective_start_date,
+                        "data_fim": history["Data"].max(),
+                        "frequencia_realocacao": frequency_name,
+                        "retorno_total": history["retorno_acumulado"].iloc[-1],
+                        "drawdown_maximo": history["drawdown"].min(),
+                        "volatilidade_anualizada": history["retorno_diario"].std()
+                        * np.sqrt(252),
+                        "rebalanceamentos_executados": len(rebalance_dates),
+                        "ativos_trocados_total": total_swaps,
+                        "entradas_total": total_entries,
+                        "saidas_total": total_exits,
+                    }
+                )
+
+    simulation_summary = pd.DataFrame(simulation_rows).sort_values(
+        ["data_inicio_solicitada", "frequencia_realocacao"] + PORTFOLIO_KEYS
+    )
+    simulation_summary["razao_retorno_drawdown"] = simulation_summary.apply(
+        lambda row: _safe_ratio(row["retorno_total"], row["drawdown_maximo"]),
+        axis=1,
+    )
+    simulation_summary["configuracao"] = simulation_summary.apply(
+        _build_config_label, axis=1
+    )
+
+    simulation_history = pd.concat(history_frames, ignore_index=True)
+    simulation_history["configuracao"] = simulation_history.apply(
+        _build_config_label, axis=1
+    )
+
+    best_return_by_period = simulation_summary.groupby("data_inicio_solicitada")[
+        "retorno_total"
+    ].transform("max")
+    simulation_summary["venceu_periodo"] = (
+        simulation_summary["retorno_total"] == best_return_by_period
+    ).astype(int)
+
+    configuration_summary = (
+        simulation_summary.groupby(
+            [
+                "Estratégia",
+                "Volume Mínimo",
+                "Ativos na Carteira",
+                "frequencia_realocacao",
+                "configuracao",
+            ],
+            as_index=False,
+        )
+        .agg(
+            retorno_medio=("retorno_total", "mean"),
+            retorno_mediano=("retorno_total", "median"),
+            retorno_min=("retorno_total", "min"),
+            retorno_max=("retorno_total", "max"),
+            drawdown_medio=("drawdown_maximo", "mean"),
+            drawdown_pior=("drawdown_maximo", "min"),
+            volatilidade_media=("volatilidade_anualizada", "mean"),
+            razao_media_retorno_drawdown=("razao_retorno_drawdown", "mean"),
+            vitorias_por_periodo=("venceu_periodo", "sum"),
+            trocas_totais=("ativos_trocados_total", "sum"),
+        )
+        .sort_values(
+            ["vitorias_por_periodo", "retorno_medio", "razao_media_retorno_drawdown"],
+            ascending=[False, False, False],
+        )
+        .reset_index(drop=True)
+    )
+
+    return {
+        "simulation_summary": simulation_summary,
+        "simulation_history": simulation_history,
+        "configuration_summary": configuration_summary,
+        "available_snapshot_dates": available_snapshot_dates,
+        "requested_start_dates": requested_start_dates,
+        "latest_quote_date": latest_quote_date,
+    }
 
 
 def credits():
@@ -154,6 +446,155 @@ def study():
     col1, col2, col3 = st.columns(3)
     with col2:
         st.write("Fonte: ROMAN, Gabriel. 2021.")
+
+
+def live_study():
+    st.header("Estudo em Tempo Real")
+    st.markdown("---")
+    st.write(
+        "Esta seção replica a ideia do estudo histórico, mas com base na composição das "
+        "carteiras e nas cotações mais recentes disponíveis no projeto."
+    )
+    st.write(
+        "A análise considera a combinação completa de parâmetros: estratégia, volume "
+        "mínimo, quantidade de ativos na carteira e frequência de realocação."
+    )
+
+    try:
+        analysis = build_live_reallocation_analysis()
+    except FileNotFoundError as exc:
+        st.error(str(exc))
+        return
+
+    summary = analysis["simulation_summary"]
+    history = analysis["simulation_history"]
+    configuration_summary = analysis["configuration_summary"]
+
+    if summary.empty or history.empty:
+        st.warning("Não há dados suficientes para montar o estudo em tempo real.")
+        return
+
+    best_configuration = configuration_summary.iloc[0]
+    worst_configuration = configuration_summary.sort_values(
+        ["retorno_medio", "razao_media_retorno_drawdown", "drawdown_pior"],
+        ascending=[True, True, True],
+    ).iloc[0]
+
+    st.markdown("---")
+    st.header("Resultados")
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Configurações avaliadas", int(configuration_summary.shape[0]))
+    col2.metric(
+        "Último dia com cotação",
+        pd.Timestamp(analysis["latest_quote_date"]).strftime("%d/%m/%Y"),
+    )
+    col3.metric("Datas iniciais testadas", len(analysis["requested_start_dates"]))
+
+    st.subheader("Retornos do Período")
+    returns_chart = (
+        configuration_summary.nlargest(10, "retorno_medio")
+        .set_index("configuracao")[["retorno_medio"]]
+        .rename(columns={"retorno_medio": "Retorno Médio"})
+    )
+    st.bar_chart(returns_chart)
+
+    st.subheader("Volatilidade Anualizada")
+    volatility_chart = (
+        configuration_summary.nsmallest(10, "volatilidade_media")
+        .set_index("configuracao")[["volatilidade_media"]]
+        .rename(columns={"volatilidade_media": "Volatilidade Média"})
+    )
+    st.bar_chart(volatility_chart)
+
+    st.subheader("Dados de Performance")
+    st.write("Melhor configuração consolidada")
+    st.dataframe(
+        best_configuration.to_frame(name="valor"),
+        use_container_width=True,
+    )
+
+    st.write("Pior configuração consolidada")
+    st.dataframe(
+        worst_configuration.to_frame(name="valor"),
+        use_container_width=True,
+    )
+
+    st.write("Top 10 configurações por retorno médio")
+    st.dataframe(
+        configuration_summary[
+            [
+                "Estratégia",
+                "Volume Mínimo",
+                "Ativos na Carteira",
+                "frequencia_realocacao",
+                "retorno_medio",
+                "volatilidade_media",
+                "drawdown_medio",
+                "vitorias_por_periodo",
+                "trocas_totais",
+            ]
+        ].head(10),
+        use_container_width=True,
+    )
+
+    st.write("CAGR: retorno anual composto")
+    st.write(
+        "Volatilidade anualizada: dispersão dos retornos diários da carteira "
+        "trazidos para uma base anual."
+    )
+    st.write(
+        "Drawdown máximo: maior queda acumulada observada desde o pico até o vale "
+        "dentro da janela analisada."
+    )
+
+    st.subheader("Retorno Acumulado para R$100,00")
+    best_label = best_configuration["configuracao"]
+    worst_label = worst_configuration["configuracao"]
+    selected_history = history[
+        history["configuracao"].isin([best_label, worst_label])
+    ].copy()
+    selected_history["valor_base_100"] = (
+        selected_history["valor_carteira"] / INITIAL_CAPITAL
+    ) * 100
+    line_chart = selected_history.pivot_table(
+        index="Data",
+        columns="configuracao",
+        values="valor_base_100",
+        aggfunc="last",
+    )
+    st.line_chart(line_chart)
+
+    st.subheader("Comparação entre Balanceamento Anual e Trimestral")
+    comparison_base = best_configuration
+    rebalancing_comparison = history[
+        (history["Estratégia"] == comparison_base["Estratégia"])
+        & (history["Volume Mínimo"] == comparison_base["Volume Mínimo"])
+        & (history["Ativos na Carteira"] == comparison_base["Ativos na Carteira"])
+        & (
+            history["data_inicio_solicitada"]
+            == summary[
+                summary["configuracao"] == comparison_base["configuracao"]
+            ]["data_inicio_solicitada"].min()
+        )
+        & (history["frequencia_realocacao"].isin(["anual", "trimestral"]))
+    ].copy()
+    rebalancing_comparison["valor_base_100"] = (
+        rebalancing_comparison["valor_carteira"] / INITIAL_CAPITAL
+    ) * 100
+    comparison_chart = rebalancing_comparison.pivot_table(
+        index="Data",
+        columns="frequencia_realocacao",
+        values="valor_base_100",
+        aggfunc="last",
+    )
+    st.line_chart(comparison_chart)
+
+    if comparison_chart.nunique().max() <= 1:
+        st.info(
+            "Na janela atual, anual e trimestral ainda aparecem iguais porque não "
+            "houve tempo suficiente para disparar um novo rebalanceamento."
+        )
 
 
 def study_eng():
@@ -639,12 +1080,17 @@ def main():
         st.title("Value Investing")
         st.markdown("---")
 
-        painel = st.sidebar.radio("Painel", ["Início", "Estudo", "Lista de Ações"])
+        painel = st.sidebar.radio(
+            "Painel",
+            ["Início", "Estudo", "Estudo em Tempo Real", "Lista de Ações"],
+        )
 
         if painel == "Início":
             homepage()
         elif painel == "Estudo":
             study()
+        elif painel == "Estudo em Tempo Real":
+            live_study()
         elif painel == "Lista de Ações":
             stock_list()
         elif painel == "Rebalanceamento":
