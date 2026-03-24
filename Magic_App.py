@@ -1,3 +1,4 @@
+import altair as alt
 import fundamentus as fd
 import numpy as np
 import pandas as pd
@@ -10,6 +11,7 @@ PERFORMANCE_HISTORY_PATH = (
     REPO_ROOT / "data" / "performance_committed_since_2026-03-10.parquet"
 )
 QUOTE_HISTORY_PATH = REPO_ROOT / "data" / "fundamentus_data.parquet"
+BENCHMARK_HISTORY_PATH = REPO_ROOT / "data" / "benchmark_history.parquet"
 INITIAL_CAPITAL = 100000.0
 PORTFOLIO_KEYS = ["Estratégia", "Volume Mínimo", "Ativos na Carteira"]
 ROW_KEYS = PORTFOLIO_KEYS + ["Data", "papel"]
@@ -126,6 +128,106 @@ def _build_config_label(row):
         f" | {int(row['Ativos na Carteira'])} ativos"
         f" | {row['frequencia_realocacao']}"
     )
+
+
+@st.cache_data(show_spinner=False)
+def load_live_benchmark_history():
+    if not BENCHMARK_HISTORY_PATH.exists():
+        raise FileNotFoundError(f"Arquivo não encontrado: {BENCHMARK_HISTORY_PATH}")
+
+    df = pd.read_parquet(BENCHMARK_HISTORY_PATH)
+    df["Data"] = pd.to_datetime(df["Data"])
+    for column in ["ibov_close", "cdi_rate_aa"]:
+        if column in df.columns:
+            df[column] = pd.to_numeric(df[column], errors="coerce")
+    return df.sort_values("Data").drop_duplicates(subset=["Data"], keep="last").reset_index(
+        drop=True
+    )
+
+
+def build_live_benchmark_chart(chart_dates):
+    chart_index = pd.DatetimeIndex(chart_dates).sort_values()
+    warnings = []
+
+    if chart_index.empty:
+        return pd.DataFrame(index=chart_index), warnings
+
+    try:
+        benchmark_history = load_live_benchmark_history()
+        benchmark_history = benchmark_history[
+            benchmark_history["Data"].between(
+                chart_index.min(), chart_index.max()
+            )
+        ]
+        benchmark_history = benchmark_history.set_index("Data").sort_index()
+        benchmark_series = {}
+
+        ibov_series = (
+            benchmark_history["ibov_close"]
+            .reindex(chart_index)
+            .ffill()
+            .dropna()
+        )
+        if not ibov_series.empty:
+            benchmark_series["IBOV"] = (ibov_series / ibov_series.iloc[0]) * 100
+
+        cdi_series = (
+            benchmark_history["cdi_rate_aa"]
+            .reindex(chart_index)
+            .ffill()
+            .dropna()
+        )
+        if not cdi_series.empty:
+            daily_factor = (1 + (cdi_series / 100)) ** (1 / 252)
+            benchmark_series["CDI"] = 100 * (
+                daily_factor.cumprod() / daily_factor.iloc[0]
+            )
+
+        benchmark_chart = pd.DataFrame(benchmark_series, index=chart_index)
+        if benchmark_chart.empty:
+            warnings.append(
+                "Benchmarks carregados, mas sem interseção de datas com o período exibido."
+            )
+    except Exception as exc:
+        warnings.append(f"Benchmarks indisponíveis no momento: {exc}")
+        benchmark_chart = pd.DataFrame(index=chart_index)
+
+    return benchmark_chart, warnings
+
+
+def render_zoomed_line_chart(chart_df, series_name="Série", color_name="Legenda"):
+    if chart_df.empty:
+        st.info("Não há dados suficientes para exibir o gráfico.")
+        return
+
+    value_min = float(chart_df.min().min())
+    value_max = float(chart_df.max().max())
+    padding = max((value_max - value_min) * 0.15, 0.5)
+    y_domain = [value_min - padding, value_max + padding]
+
+    chart_data = (
+        chart_df.reset_index()
+        .melt(id_vars="Data", var_name=color_name, value_name=series_name)
+        .dropna(subset=[series_name])
+    )
+
+    chart = (
+        alt.Chart(chart_data)
+        .mark_line(strokeWidth=2)
+        .encode(
+            x=alt.X("Data:T", title=None),
+            y=alt.Y(f"{series_name}:Q", title=None, scale=alt.Scale(domain=y_domain)),
+            color=alt.Color(f"{color_name}:N", title=None),
+            tooltip=[
+                alt.Tooltip("Data:T", title="Data"),
+                alt.Tooltip(f"{color_name}:N", title="Série"),
+                alt.Tooltip(f"{series_name}:Q", title="Valor", format=".2f"),
+            ],
+        )
+        .properties(height=360)
+    )
+
+    st.altair_chart(chart, width="stretch")
 
 
 @st.cache_data(show_spinner=False)
@@ -599,7 +701,14 @@ def live_study():
         values="valor_base_100",
         aggfunc="last",
     )
-    st.line_chart(line_chart)
+    benchmark_chart, benchmark_warnings = build_live_benchmark_chart(line_chart.index)
+    render_zoomed_line_chart(
+        line_chart.join(benchmark_chart, how="left"),
+        series_name="Valor Base 100",
+        color_name="Configuração",
+    )
+    for warning in benchmark_warnings:
+        st.caption(warning)
 
     st.subheader("Comparação entre Balanceamento Anual e Trimestral")
     comparison_base = best_configuration
@@ -624,7 +733,11 @@ def live_study():
         values="valor_base_100",
         aggfunc="last",
     )
-    st.line_chart(comparison_chart)
+    render_zoomed_line_chart(
+        comparison_chart,
+        series_name="Valor Base 100",
+        color_name="Frequência",
+    )
 
     if comparison_chart.nunique().max() <= 1:
         st.info(

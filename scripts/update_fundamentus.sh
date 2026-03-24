@@ -25,7 +25,7 @@ echo "Iniciando atualizacao da Fundamentus"
 
 supports_project_dependencies() {
   local candidate="$1"
-  "${candidate}" -c "import fundamentus, numpy, pandas, pyarrow" >/dev/null 2>&1
+  "${candidate}" -c "import fundamentus, numpy, pandas, pyarrow, yfinance" >/dev/null 2>&1
 }
 
 PYTHON_BIN=""
@@ -57,6 +57,8 @@ fi
 "${PYTHON_BIN}" -c "import sys; print(f'Python selecionado: {sys.executable}')"
 
 "${PYTHON_BIN}" -m scripts.get_fundamentus_data
+
+"${PYTHON_BIN}" -m scripts.update_market_benchmarks
 
 "${PYTHON_BIN}" -m scripts.performance
 
