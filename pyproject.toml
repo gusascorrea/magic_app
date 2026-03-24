@@ -19,6 +19,7 @@ html5lib = "^1.1"
 ipykernel = "^6.29.5"
 pyarrow = "^19.0.1"
 matplotlib = "^3.10.8"
+streamlit = "^1.55.0"
 
 
 [build-system]
