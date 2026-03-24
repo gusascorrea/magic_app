@@ -17,6 +17,40 @@ REALLOCATION_FREQUENCIES = {"mensal": 1, "trimestral": 3, "anual": 12}
 LIVE_ANALYSIS_START = pd.Timestamp("2026-03-12")
 
 
+def _prepare_streamlit_dataframe(df):
+    prepared = df.copy()
+    for column in prepared.columns:
+        if pd.api.types.is_object_dtype(prepared[column]):
+            prepared[column] = prepared[column].astype("string")
+    return prepared
+
+
+def _safe_list_papel_setor(setor_id):
+    try:
+        papeis = fd.list_papel_setor(setor_id)
+    except Exception:
+        return []
+    return papeis if isinstance(papeis, list) else []
+
+
+def _load_financial_sector_tickers():
+    fin = []
+    seg = []
+
+    for setor_id in range(200):
+        papeis = _safe_list_papel_setor(setor_id)
+        if not fin and "BBAS3" in papeis:
+            fin = papeis
+        if not seg and "WIZC3" in papeis:
+            seg = papeis
+        if fin and seg:
+            financeiras = fin + seg
+            financeiras.remove("WIZC3")
+            return financeiras
+
+    return []
+
+
 @st.cache_data(show_spinner=False)
 def load_live_portfolio_history():
     if not PERFORMANCE_HISTORY_PATH.exists():
@@ -510,32 +544,34 @@ def live_study():
     st.subheader("Dados de Performance")
     st.write("Melhor configuração consolidada")
     st.dataframe(
-        best_configuration.to_frame(name="valor"),
-        use_container_width=True,
+        _prepare_streamlit_dataframe(best_configuration.to_frame(name="valor")),
+        width="stretch",
     )
 
     st.write("Pior configuração consolidada")
     st.dataframe(
-        worst_configuration.to_frame(name="valor"),
-        use_container_width=True,
+        _prepare_streamlit_dataframe(worst_configuration.to_frame(name="valor")),
+        width="stretch",
     )
 
     st.write("Top 10 configurações por retorno médio")
     st.dataframe(
-        configuration_summary[
-            [
-                "Estratégia",
-                "Volume Mínimo",
-                "Ativos na Carteira",
-                "frequencia_realocacao",
-                "retorno_medio",
-                "volatilidade_media",
-                "drawdown_medio",
-                "vitorias_por_periodo",
-                "trocas_totais",
-            ]
-        ].head(10),
-        use_container_width=True,
+        _prepare_streamlit_dataframe(
+            configuration_summary[
+                [
+                    "Estratégia",
+                    "Volume Mínimo",
+                    "Ativos na Carteira",
+                    "frequencia_realocacao",
+                    "retorno_medio",
+                    "volatilidade_media",
+                    "drawdown_medio",
+                    "vitorias_por_periodo",
+                    "trocas_totais",
+                ]
+            ].head(10)
+        ),
+        width="stretch",
     )
 
     st.write("CAGR: retorno anual composto")
@@ -683,25 +719,7 @@ def stock_list():
     # Removendo financeiras menos WIZC3
     df = fd.get_resultado_raw()
 
-    i = 0
-    j = 0
-    k = 0
-
-    while True:
-        fin_ = fd.list_papel_setor(i)  # finance
-        if "BBAS3" in fin_:
-            fin = fin_
-            j = 1
-        seg_ = fd.list_papel_setor(i)  # finance
-        if "WIZC3" in seg_:
-            seg = seg_
-            k = 1
-        if j == 1 and k == 1:
-            financeiras = fin + seg
-            break
-        i += 1
-
-    financeiras.remove("WIZC3")
+    financeiras = _load_financial_sector_tickers()
 
     df = df[~df.index.isin(financeiras)]
 
@@ -871,25 +889,7 @@ def stock_list_eng():
     # Removendo financeiras menos WIZC3
     df = fd.get_resultado_raw()
 
-    i = 0
-    j = 0
-    k = 0
-
-    while True:
-        fin_ = fd.list_papel_setor(i)  # finance
-        if "BBAS3" in fin_:
-            fin = fin_
-            j = 1
-        seg_ = fd.list_papel_setor(i)  # finance
-        if "WIZC3" in seg_:
-            seg = seg_
-            k = 1
-        if j == 1 and k == 1:
-            financeiras = fin + seg
-            break
-        i += 1
-
-    financeiras.remove("WIZC3")
+    financeiras = _load_financial_sector_tickers()
 
     df = df[~df.index.isin(financeiras)]
 
