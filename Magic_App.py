@@ -627,22 +627,6 @@ def live_study():
     )
     col3.metric("Datas iniciais testadas", len(analysis["requested_start_dates"]))
 
-    st.subheader("Retornos do Período")
-    returns_chart = (
-        configuration_summary.nlargest(10, "retorno_medio")
-        .set_index("configuracao")[["retorno_medio"]]
-        .rename(columns={"retorno_medio": "Retorno Médio"})
-    )
-    st.bar_chart(returns_chart)
-
-    st.subheader("Volatilidade Anualizada")
-    volatility_chart = (
-        configuration_summary.nsmallest(10, "volatilidade_media")
-        .set_index("configuracao")[["volatilidade_media"]]
-        .rename(columns={"volatilidade_media": "Volatilidade Média"})
-    )
-    st.bar_chart(volatility_chart)
-
     st.subheader("Dados de Performance")
     st.write("Melhor configuração consolidada")
     st.dataframe(

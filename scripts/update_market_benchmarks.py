@@ -31,7 +31,7 @@ def load_existing_benchmark_history() -> pd.DataFrame:
     return df
 
 
-def resolve_start_date(existing_history: pd.DataFrame) -> pd.Timestamp:
+def resolve_default_start_date() -> pd.Timestamp:
     candidates = [DEFAULT_START_DATE]
 
     if PERFORMANCE_HISTORY_PATH.exists():
@@ -40,10 +40,23 @@ def resolve_start_date(existing_history: pd.DataFrame) -> pd.Timestamp:
         if not performance_history.empty:
             candidates.append(performance_history["Data"].min())
 
-    if not existing_history.empty:
-        candidates.append(existing_history["Data"].max() - timedelta(days=REFRESH_LOOKBACK_DAYS))
-
     return min(candidates)
+
+
+def resolve_fetch_start_date(
+    existing_history: pd.DataFrame, value_column: str
+) -> pd.Timestamp:
+    default_start_date = resolve_default_start_date()
+
+    if existing_history.empty or value_column not in existing_history.columns:
+        return default_start_date
+
+    available_dates = existing_history.loc[existing_history[value_column].notna(), "Data"]
+    if available_dates.empty:
+        return default_start_date
+
+    watermark_start_date = available_dates.max() - timedelta(days=REFRESH_LOOKBACK_DAYS)
+    return max(default_start_date, watermark_start_date)
 
 
 def download_ibov_history(start_date: pd.Timestamp, end_date: pd.Timestamp) -> pd.DataFrame:
@@ -133,27 +146,92 @@ def merge_histories(
     return output.reset_index(drop=True)
 
 
+def build_change_summary(
+    existing_history: pd.DataFrame, updated_history: pd.DataFrame
+) -> dict:
+    existing = existing_history.copy()
+    updated = updated_history.copy()
+
+    for frame in [existing, updated]:
+        if frame.empty:
+            continue
+        frame["Data"] = pd.to_datetime(frame["Data"])
+        for column in ["ibov_close", "cdi_rate_aa"]:
+            if column in frame.columns:
+                frame[column] = pd.to_numeric(frame[column], errors="coerce")
+
+    existing = existing.set_index("Data") if not existing.empty else pd.DataFrame()
+    updated = updated.set_index("Data") if not updated.empty else pd.DataFrame()
+
+    existing_dates = set(existing.index) if not existing.empty else set()
+    updated_dates = set(updated.index) if not updated.empty else set()
+    inserted_dates = updated_dates - existing_dates
+    common_dates = updated_dates & existing_dates
+
+    ibov_updated = 0
+    cdi_updated = 0
+
+    for date in common_dates:
+        existing_ibov = existing.at[date, "ibov_close"] if "ibov_close" in existing.columns else pd.NA
+        updated_ibov = updated.at[date, "ibov_close"] if "ibov_close" in updated.columns else pd.NA
+        if pd.isna(existing_ibov) != pd.isna(updated_ibov) or (
+            pd.notna(existing_ibov) and pd.notna(updated_ibov) and existing_ibov != updated_ibov
+        ):
+            ibov_updated += 1
+
+        existing_cdi = existing.at[date, "cdi_rate_aa"] if "cdi_rate_aa" in existing.columns else pd.NA
+        updated_cdi = updated.at[date, "cdi_rate_aa"] if "cdi_rate_aa" in updated.columns else pd.NA
+        if pd.isna(existing_cdi) != pd.isna(updated_cdi) or (
+            pd.notna(existing_cdi) and pd.notna(updated_cdi) and existing_cdi != updated_cdi
+        ):
+            cdi_updated += 1
+
+    return {
+        "existing_rows": 0 if existing.empty else len(existing),
+        "updated_rows": 0 if updated.empty else len(updated),
+        "inserted_dates": len(inserted_dates),
+        "ibov_updated_dates": ibov_updated,
+        "cdi_updated_dates": cdi_updated,
+        "has_changes": bool(inserted_dates or ibov_updated or cdi_updated),
+    }
+
+
 def main():
     BENCHMARK_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     existing_history = load_existing_benchmark_history()
-    start_date = resolve_start_date(existing_history)
     end_date = pd.Timestamp.today().normalize()
 
-    ibov_history = download_ibov_history(start_date, end_date)
-    cdi_history = download_cdi_history(start_date, end_date)
+    ibov_start_date = resolve_fetch_start_date(existing_history, "ibov_close")
+    cdi_start_date = resolve_fetch_start_date(existing_history, "cdi_rate_aa")
+
+    ibov_history = download_ibov_history(ibov_start_date, end_date)
+    cdi_history = download_cdi_history(cdi_start_date, end_date)
 
     if ibov_history.empty and cdi_history.empty:
         raise RuntimeError("Nao foi possivel atualizar IBOV ou CDI.")
 
     output = merge_histories(existing_history, ibov_history, cdi_history)
-    output.to_parquet(BENCHMARK_HISTORY_PATH, engine="pyarrow")
+    change_summary = build_change_summary(existing_history, output)
 
-    print(f"Benchmarks atualizados: {len(output)} linhas salvas em {BENCHMARK_HISTORY_PATH}")
+    print(f"Linhas existentes: {change_summary['existing_rows']}")
+    print(f"Linhas apos merge: {change_summary['updated_rows']}")
+    print(f"Novas datas inseridas: {change_summary['inserted_dates']}")
+    print(f"Datas de IBOV atualizadas: {change_summary['ibov_updated_dates']}")
+    print(f"Datas de CDI atualizadas: {change_summary['cdi_updated_dates']}")
+    print(f"IBOV buscado desde {ibov_start_date.date()}")
+    print(f"CDI buscado desde {cdi_start_date.date()}")
     if not ibov_history.empty:
         print(f"IBOV atualizado ate {ibov_history['Data'].max().date()}")
     if not cdi_history.empty:
         print(f"CDI atualizado ate {cdi_history['Data'].max().date()}")
+
+    if not change_summary["has_changes"]:
+        print("Nenhuma mudanca detectada. Parquet mantido sem regravacao.")
+        return
+
+    output.to_parquet(BENCHMARK_HISTORY_PATH, engine="pyarrow")
+    print(f"Benchmarks atualizados: {len(output)} linhas salvas em {BENCHMARK_HISTORY_PATH}")
 
 
 if __name__ == "__main__":
