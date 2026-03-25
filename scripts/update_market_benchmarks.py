@@ -145,6 +145,11 @@ def merge_histories(
         if refreshed_sources
         else existing.iloc[0:0].copy()
     )
+    existing_refresh_window = (
+        existing[existing["Data"] >= min(refreshed_sources)]
+        if refreshed_sources
+        else existing.iloc[0:0].copy()
+    )
 
     merged = pd.DataFrame(columns=["Data"])
     for history in yahoo_histories.values():
@@ -153,6 +158,13 @@ def merge_histories(
         merged = history if merged.empty else merged.merge(history, on="Data", how="outer")
     if not cdi_history.empty:
         merged = cdi_history if merged.empty else merged.merge(cdi_history, on="Data", how="outer")
+
+    if not merged.empty and not existing_refresh_window.empty:
+        merged = (
+            merged.set_index("Data")
+            .combine_first(existing_refresh_window.set_index("Data"))
+            .reset_index()
+        )
 
     frames = [frame for frame in [refreshed, merged] if not frame.empty]
     if not frames:
