@@ -87,7 +87,9 @@ def load_working_tree_csv_version(input_path: Path) -> pd.DataFrame:
 
     frame = pd.read_csv(working_tree_path)
     frame["commit_hash"] = "WORKING_TREE"
-    frame["commit_committed_at"] = pd.Timestamp.now(tz="America/Sao_Paulo").isoformat()
+    frame["commit_committed_at"] = pd.Timestamp.now(
+        tz="America/Sao_Paulo"
+    ).isoformat(timespec="seconds")
     return frame
 
 

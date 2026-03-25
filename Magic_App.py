@@ -91,7 +91,13 @@ def load_live_portfolio_history():
 
     df = pd.read_parquet(PERFORMANCE_HISTORY_PATH)
     df["Data"] = pd.to_datetime(df["Data"])
-    df["commit_committed_at"] = pd.to_datetime(df["commit_committed_at"], utc=True)
+    df["commit_committed_at"] = pd.to_datetime(
+        df["commit_committed_at"],
+        utc=True,
+        format="mixed",
+        errors="coerce",
+    )
+    df = df.dropna(subset=["commit_committed_at"])
     return (
         df.sort_values("commit_committed_at")
         .drop_duplicates(subset=ROW_KEYS, keep="last")
