@@ -160,6 +160,23 @@ def _safe_ratio(return_value, drawdown_value):
     return return_value / abs(drawdown_value)
 
 
+def _compute_cagr(initial_value, final_value, start_date, end_date):
+    if any(pd.isna(value) for value in [initial_value, final_value, start_date, end_date]):
+        return np.nan
+    if initial_value <= 0 or final_value <= 0:
+        return np.nan
+
+    total_days = (pd.Timestamp(end_date) - pd.Timestamp(start_date)).days
+    if total_days <= 0:
+        return np.nan
+
+    years = total_days / 365.25
+    if years <= 0:
+        return np.nan
+
+    return (final_value / initial_value) ** (1 / years) - 1
+
+
 def _build_config_label(row):
     return (
         f"{row['Estratégia']} | vol {int(row['Volume Mínimo'])}"
@@ -490,6 +507,12 @@ def build_live_reallocation_analysis():
                 history["retorno_acumulado"] = (
                     history["valor_carteira"] / INITIAL_CAPITAL - 1
                 )
+                cagr = _compute_cagr(
+                    INITIAL_CAPITAL,
+                    history["valor_carteira"].iloc[-1],
+                    history["Data"].iloc[0],
+                    history["Data"].iloc[-1],
+                )
                 history_frames.append(history)
 
                 simulation_rows.append(
@@ -500,6 +523,7 @@ def build_live_reallocation_analysis():
                         "data_fim": history["Data"].max(),
                         "frequencia_realocacao": frequency_name,
                         "retorno_total": history["retorno_acumulado"].iloc[-1],
+                        "cagr": cagr,
                         "drawdown_maximo": history["drawdown"].min(),
                         "volatilidade_anualizada": history["retorno_diario"].std()
                         * np.sqrt(252),
@@ -513,8 +537,8 @@ def build_live_reallocation_analysis():
     simulation_summary = pd.DataFrame(simulation_rows).sort_values(
         ["data_inicio_solicitada", "frequencia_realocacao"] + PORTFOLIO_KEYS
     )
-    simulation_summary["razao_retorno_drawdown"] = simulation_summary.apply(
-        lambda row: _safe_ratio(row["retorno_total"], row["drawdown_maximo"]),
+    simulation_summary["razao_cagr_drawdown"] = simulation_summary.apply(
+        lambda row: _safe_ratio(row["cagr"], row["drawdown_maximo"]),
         axis=1,
     )
     simulation_summary["configuracao"] = simulation_summary.apply(
@@ -526,11 +550,11 @@ def build_live_reallocation_analysis():
         _build_config_label, axis=1
     )
 
-    best_return_by_period = simulation_summary.groupby("data_inicio_solicitada")[
-        "retorno_total"
-    ].transform("max")
+    best_return_by_period = simulation_summary.groupby("data_inicio_solicitada")["cagr"].transform(
+        "max"
+    )
     simulation_summary["venceu_periodo"] = (
-        simulation_summary["retorno_total"] == best_return_by_period
+        simulation_summary["cagr"] == best_return_by_period
     ).astype(int)
 
     configuration_group_keys = [
@@ -543,7 +567,7 @@ def build_live_reallocation_analysis():
 
     best_start_dates = (
         simulation_summary.loc[
-            simulation_summary.groupby(configuration_group_keys)["retorno_total"].idxmax(),
+            simulation_summary.groupby(configuration_group_keys)["cagr"].idxmax(),
             configuration_group_keys + ["data_inicio_solicitada"],
         ]
         .rename(columns={"data_inicio_solicitada": "data_inicio_maior_retorno"})
@@ -564,11 +588,11 @@ def build_live_reallocation_analysis():
             as_index=False,
         )
         .agg(
-            retorno_medio=("retorno_total", "mean"),
-            retorno_mediano=("retorno_total", "median"),
-            retorno_min=("retorno_total", "min"),
-            retorno_max=("retorno_total", "max"),
-            retorno_q1=("retorno_total", lambda series: series.quantile(0.25)),
+            cagr_medio=("cagr", "mean"),
+            cagr_mediano=("cagr", "median"),
+            cagr_min=("cagr", "min"),
+            cagr_max=("cagr", "max"),
+            cagr_q1=("cagr", lambda series: series.quantile(0.25)),
             drawdown_medio=("drawdown_maximo", "mean"),
             drawdown_pior=("drawdown_maximo", "min"),
             drawdown_q1=("drawdown_maximo", lambda series: series.quantile(0.25)),
@@ -577,15 +601,15 @@ def build_live_reallocation_analysis():
             trocas_totais=("ativos_trocados_total", "sum"),
         )
         .assign(
-            razao_q1_retorno_q1_drawdown=lambda df: df.apply(
-                lambda row: _safe_ratio(row["retorno_q1"], row["drawdown_q1"]),
+            razao_q1_cagr_q1_drawdown=lambda df: df.apply(
+                lambda row: _safe_ratio(row["cagr_q1"], row["drawdown_q1"]),
                 axis=1,
             )
         )
         .sort_values(
             [
-                "razao_q1_retorno_q1_drawdown",
-                "retorno_q1",
+                "razao_q1_cagr_q1_drawdown",
+                "cagr_q1",
                 "drawdown_q1",
                 "vitorias_por_periodo",
             ],
@@ -795,8 +819,8 @@ def live_study():
     best_configuration = configuration_summary.iloc[0]
     worst_configuration = configuration_summary.sort_values(
         [
-            "razao_q1_retorno_q1_drawdown",
-            "retorno_q1",
+            "razao_q1_cagr_q1_drawdown",
+            "cagr_q1",
             "drawdown_q1",
             "vitorias_por_periodo",
         ],
@@ -830,7 +854,7 @@ def live_study():
         width="stretch",
     )
 
-    st.write("Top 10 configurações por Q1 de retorno / Q1 de drawdown")
+    st.write("Top 10 configurações por Q1 de CAGR / Q1 de drawdown")
     st.dataframe(
         _prepare_snake_case_table(
             configuration_summary[
@@ -839,10 +863,10 @@ def live_study():
                     "Volume Mínimo",
                     "Ativos na Carteira",
                     "frequencia_realocacao",
-                    "razao_q1_retorno_q1_drawdown",
-                    "retorno_q1",
+                    "razao_q1_cagr_q1_drawdown",
+                    "cagr_q1",
                     "drawdown_q1",
-                    "retorno_medio",
+                    "cagr_medio",
                     "volatilidade_media",
                     "drawdown_medio",
                     "data_inicio_maior_retorno",
