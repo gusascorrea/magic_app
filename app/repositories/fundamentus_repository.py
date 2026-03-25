@@ -1,10 +1,11 @@
-import fundamentus as fd
 import streamlit as st
+
+from app.clients.fundamentus_client import get_resultado_raw, list_papel_setor
 
 
 def _safe_list_papel_setor(setor_id):
     try:
-        papeis = fd.list_papel_setor(setor_id)
+        papeis = list_papel_setor(setor_id)
     except Exception:
         return []
     return papeis if isinstance(papeis, list) else []
@@ -31,4 +32,4 @@ def load_financial_sector_tickers():
 
 @st.cache_data(show_spinner=False)
 def load_raw_fundamentus_result():
-    return fd.get_resultado_raw()
+    return get_resultado_raw()

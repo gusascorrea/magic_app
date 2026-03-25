@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 
+from app.clients.parquet_client import read_parquet
 from app.config import (
     BENCHMARK_HISTORY_PATH,
     BENCHMARK_LABELS,
@@ -16,7 +17,7 @@ def load_live_portfolio_history():
     if not PERFORMANCE_HISTORY_PATH.exists():
         raise FileNotFoundError(f"Arquivo não encontrado: {PERFORMANCE_HISTORY_PATH}")
 
-    df = pd.read_parquet(PERFORMANCE_HISTORY_PATH)
+    df = read_parquet(PERFORMANCE_HISTORY_PATH)
     df["Data"] = pd.to_datetime(df["Data"])
     df["commit_committed_at"] = pd.to_datetime(
         df["commit_committed_at"],
@@ -38,7 +39,7 @@ def load_live_quote_history():
     if not QUOTE_HISTORY_PATH.exists():
         raise FileNotFoundError(f"Arquivo não encontrado: {QUOTE_HISTORY_PATH}")
 
-    df = pd.read_parquet(QUOTE_HISTORY_PATH)
+    df = read_parquet(QUOTE_HISTORY_PATH)
     if "papel" not in df.columns:
         df = df.reset_index(names="papel")
     df = df.rename(columns={"update date": "Data"})
@@ -57,7 +58,7 @@ def load_live_benchmark_history():
     if not BENCHMARK_HISTORY_PATH.exists():
         raise FileNotFoundError(f"Arquivo não encontrado: {BENCHMARK_HISTORY_PATH}")
 
-    df = pd.read_parquet(BENCHMARK_HISTORY_PATH)
+    df = read_parquet(BENCHMARK_HISTORY_PATH)
     df["Data"] = pd.to_datetime(df["Data"])
     for column in BENCHMARK_LABELS:
         if column in df.columns:

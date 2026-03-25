@@ -12,6 +12,10 @@ PERFORMANCE_HISTORY_PATH = DATA_DIR / "performance_committed_since_2026-03-10.pa
 QUOTE_HISTORY_PATH = DATA_DIR / "fundamentus_data.parquet"
 BENCHMARK_HISTORY_PATH = DATA_DIR / "benchmark_history.parquet"
 REFERENCE_PDF_PATH = REFERENCES_DIR / "TCC Magic Formula.pdf"
+CDI_FTP_HOST = "ftp.cetip.com.br"
+CDI_FTP_DIR = "MediaCDI"
+DEFAULT_BENCHMARK_START_DATE = pd.Timestamp("2026-03-01")
+BENCHMARK_REFRESH_LOOKBACK_DAYS = 10
 
 INITIAL_CAPITAL = 100000.0
 PORTFOLIO_KEYS = ["Estratégia", "Volume Mínimo", "Ativos na Carteira"]
@@ -25,3 +29,9 @@ BENCHMARK_LABELS = {
     "sp500_close": "S&P500",
     "bitcoin_close": "Bitcoin",
 }
+YAHOO_BENCHMARKS = {
+    "ibov_close": {"ticker": "^BVSP", "label": "IBOV"},
+    "sp500_close": {"ticker": "^GSPC", "label": "S&P500"},
+    "bitcoin_close": {"ticker": "BTC-USD", "label": "Bitcoin"},
+}
+BENCHMARK_COLUMNS = ["Data", *YAHOO_BENCHMARKS.keys(), "cdi_rate_aa"]

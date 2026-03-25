@@ -72,11 +72,11 @@ if [[ -f "${REPO_ROOT}/http_cache.sqlite" ]]; then
   rm "${REPO_ROOT}/http_cache.sqlite"
 fi
 
-git add .
-git diff --cached --quiet && exit 0
+# git add .
+# git diff --cached --quiet && exit 0
 
-git commit -m "Dados da Fundamentus atualizados"
-git push
+# git commit -m "Dados da Fundamentus atualizados"
+# git push
 
 echo "Atualizacao concluida"
 echo "######################################################################"
