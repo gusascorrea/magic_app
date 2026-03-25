@@ -99,7 +99,6 @@ def performance():
                     # Identificar entradas e saídas
                     ativos_atuais = set(sorted_df.index)
                     if not carteira_anterior.empty:
-                        ativos_anteriores = set(carteira_anterior.index)
                         vendidos = carteira_anterior.loc[
                             ~carteira_anterior.index.isin(ativos_atuais)
                         ]
@@ -117,12 +116,11 @@ def performance():
                         comprados["Valor"] = (
                             comprados["Cotação"] * comprados["Quantidade"]
                         )
-                        valor_comprado = comprados["Valor"].sum()
                         if len(vendidos) > 0:
                             # calcula valor vendido de ativos vendidos
                             vendidos.drop(columns=["Cotação"], inplace=True)
                             vendidos = vendidos.merge(
-                                sorted_df[["Cotação"]],
+                                df[["Cotação"]],
                                 left_index=True,
                                 right_index=True,
                                 how="left",
@@ -132,8 +130,9 @@ def performance():
                             )
                             valor_vendido = vendidos["Valor"].sum()
                             # Calcular quantidade de novos ativos comprados
+                            ativos_mantidos = comprados.index
                             sorted_df["Quantidade"] = np.where(
-                                ~sorted_df.index.isin(vendidos),
+                                ~sorted_df.index.isin(ativos_mantidos),
                                 round(
                                     (valor_vendido / len(vendidos))
                                     / sorted_df["Cotação"],
@@ -147,6 +146,9 @@ def performance():
                             right_index=True,
                             how="left",
                         )
+                        sorted_df[["Quantidade_x", "Quantidade_y"]] = sorted_df[
+                            ["Quantidade_x", "Quantidade_y"]
+                        ].fillna(0)
                         sorted_df["Quantidade"] = (
                             sorted_df["Quantidade_x"] + sorted_df["Quantidade_y"]
                         )

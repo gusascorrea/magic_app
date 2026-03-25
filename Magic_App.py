@@ -19,6 +19,7 @@ PORTFOLIO_KEYS = ["Estratégia", "Volume Mínimo", "Ativos na Carteira"]
 ROW_KEYS = PORTFOLIO_KEYS + ["Data", "papel"]
 REALLOCATION_FREQUENCIES = {"mensal": 1, "trimestral": 3, "anual": 12}
 LIVE_ANALYSIS_START = pd.Timestamp("2026-03-12")
+MIN_ANALYSIS_TRADING_DAYS = 4
 BENCHMARK_LABELS = {
     "ibov_close": "IBOV",
     "cdi_rate_aa": "CDI",
@@ -152,10 +153,10 @@ def _compute_rebalance_dates(start_date, end_date, months, available_dates):
 
 
 def _safe_ratio(return_value, drawdown_value):
-    if drawdown_value == 0 and return_value > 0:
-        return float("inf")
-    if drawdown_value == 0:
-        return 0.0
+    if pd.isna(return_value) or pd.isna(drawdown_value):
+        return np.nan
+    if abs(drawdown_value) < 1e-12:
+        return np.nan
     return return_value / abs(drawdown_value)
 
 
@@ -165,6 +166,20 @@ def _build_config_label(row):
         f" | {int(row['Ativos na Carteira'])} ativos"
         f" | {row['frequencia_realocacao']}"
     )
+
+
+def _resolve_chart_start_date(history: pd.DataFrame, config_label: str) -> pd.Timestamp | None:
+    config_dates = (
+        history.loc[history["configuracao"] == config_label, "data_inicio_solicitada"]
+        .dropna()
+        .sort_values()
+        .unique()
+    )
+    if len(config_dates) == 0:
+        return None
+    if LIVE_ANALYSIS_START in config_dates:
+        return LIVE_ANALYSIS_START
+    return config_dates[0]
 
 
 @st.cache_data(show_spinner=False)
@@ -237,9 +252,12 @@ def render_zoomed_line_chart(chart_df, series_name="Série", color_name="Legenda
     padding = max((value_max - value_min) * 0.15, 0.5)
     y_domain = [value_min - padding, value_max + padding]
 
+    index_name = chart_df.index.name or "Data"
+    chart_data = chart_df.reset_index()
+    if index_name != "Data":
+        chart_data = chart_data.rename(columns={index_name: "Data"})
     chart_data = (
-        chart_df.reset_index()
-        .melt(id_vars="Data", var_name=color_name, value_name=series_name)
+        chart_data.melt(id_vars="Data", var_name=color_name, value_name=series_name)
         .dropna(subset=[series_name])
     )
 
@@ -278,9 +296,16 @@ def build_live_reallocation_analysis():
     )
 
     available_snapshot_dates = sorted(portfolio_history["Data"].unique())
-    requested_start_dates = pd.date_range(
+    all_requested_start_dates = pd.date_range(
         LIVE_ANALYSIS_START, max(available_snapshot_dates), freq="D"
     )
+    requested_start_dates = [
+        snapshot_date
+        for snapshot_date in available_snapshot_dates
+        if snapshot_date >= LIVE_ANALYSIS_START
+        and int((quote_matrix.index[quote_matrix.index >= snapshot_date]).shape[0])
+        >= MIN_ANALYSIS_TRADING_DAYS
+    ]
     latest_quote_date = quote_matrix.index.max()
 
     simulation_rows = []
@@ -424,15 +449,34 @@ def build_live_reallocation_analysis():
         simulation_summary["retorno_total"] == best_return_by_period
     ).astype(int)
 
+    configuration_group_keys = [
+        "Estratégia",
+        "Volume Mínimo",
+        "Ativos na Carteira",
+        "frequencia_realocacao",
+        "configuracao",
+    ]
+
+    best_start_dates = (
+        simulation_summary.loc[
+            simulation_summary.groupby(configuration_group_keys)["retorno_total"].idxmax(),
+            configuration_group_keys + ["data_inicio_solicitada"],
+        ]
+        .rename(columns={"data_inicio_solicitada": "data_inicio_maior_retorno"})
+        .reset_index(drop=True)
+    )
+    worst_drawdown_start_dates = (
+        simulation_summary.loc[
+            simulation_summary.groupby(configuration_group_keys)["drawdown_maximo"].idxmin(),
+            configuration_group_keys + ["data_inicio_solicitada"],
+        ]
+        .rename(columns={"data_inicio_solicitada": "data_inicio_maior_drawdown"})
+        .reset_index(drop=True)
+    )
+
     configuration_summary = (
         simulation_summary.groupby(
-            [
-                "Estratégia",
-                "Volume Mínimo",
-                "Ativos na Carteira",
-                "frequencia_realocacao",
-                "configuracao",
-            ],
+            configuration_group_keys,
             as_index=False,
         )
         .agg(
@@ -443,9 +487,14 @@ def build_live_reallocation_analysis():
             drawdown_medio=("drawdown_maximo", "mean"),
             drawdown_pior=("drawdown_maximo", "min"),
             volatilidade_media=("volatilidade_anualizada", "mean"),
-            razao_media_retorno_drawdown=("razao_retorno_drawdown", "mean"),
             vitorias_por_periodo=("venceu_periodo", "sum"),
             trocas_totais=("ativos_trocados_total", "sum"),
+        )
+        .assign(
+            razao_media_retorno_drawdown=lambda df: df.apply(
+                lambda row: _safe_ratio(row["retorno_medio"], row["drawdown_pior"]),
+                axis=1,
+            )
         )
         .sort_values(
             ["vitorias_por_periodo", "retorno_medio", "razao_media_retorno_drawdown"],
@@ -453,12 +502,22 @@ def build_live_reallocation_analysis():
         )
         .reset_index(drop=True)
     )
+    configuration_summary = configuration_summary.merge(
+        best_start_dates,
+        on=configuration_group_keys,
+        how="left",
+    ).merge(
+        worst_drawdown_start_dates,
+        on=configuration_group_keys,
+        how="left",
+    )
 
     return {
         "simulation_summary": simulation_summary,
         "simulation_history": simulation_history,
         "configuration_summary": configuration_summary,
         "available_snapshot_dates": available_snapshot_dates,
+        "all_requested_start_dates": all_requested_start_dates,
         "requested_start_dates": requested_start_dates,
         "latest_quote_date": latest_quote_date,
     }
@@ -657,7 +716,10 @@ def live_study():
         "Último dia com cotação",
         pd.Timestamp(analysis["latest_quote_date"]).strftime("%d/%m/%Y"),
     )
-    col3.metric("Datas iniciais testadas", len(analysis["requested_start_dates"]))
+    col3.metric(
+        "Datas iniciais testadas",
+        len(analysis["all_requested_start_dates"]),
+    )
 
     st.subheader("Dados de Performance")
     st.write("Melhor configuração consolidada")
@@ -684,6 +746,8 @@ def live_study():
                     "retorno_medio",
                     "volatilidade_media",
                     "drawdown_medio",
+                    "data_inicio_maior_retorno",
+                    "data_inicio_maior_drawdown",
                     "vitorias_por_periodo",
                     "trocas_totais",
                 ]
@@ -705,9 +769,19 @@ def live_study():
     st.subheader("Retorno Acumulado para R$100,00")
     best_label = best_configuration["configuracao"]
     worst_label = worst_configuration["configuracao"]
-    selected_history = history[
-        history["configuracao"].isin([best_label, worst_label])
-    ].copy()
+    selected_histories = []
+    for config_label in [best_label, worst_label]:
+        chart_start_date = _resolve_chart_start_date(history, config_label)
+        if chart_start_date is None:
+            continue
+        selected_histories.append(
+            history[
+                (history["configuracao"] == config_label)
+                & (history["data_inicio_solicitada"] == chart_start_date)
+            ].copy()
+        )
+
+    selected_history = pd.concat(selected_histories, ignore_index=True)
     selected_history["valor_base_100"] = (
         selected_history["valor_carteira"] / INITIAL_CAPITAL
     ) * 100
@@ -726,40 +800,30 @@ def live_study():
     for warning in benchmark_warnings:
         st.caption(warning)
 
-    st.subheader("Comparação entre Balanceamento Anual e Trimestral")
-    comparison_base = best_configuration
-    rebalancing_comparison = history[
-        (history["Estratégia"] == comparison_base["Estratégia"])
-        & (history["Volume Mínimo"] == comparison_base["Volume Mínimo"])
-        & (history["Ativos na Carteira"] == comparison_base["Ativos na Carteira"])
-        & (
-            history["data_inicio_solicitada"]
-            == summary[
-                summary["configuracao"] == comparison_base["configuracao"]
-            ]["data_inicio_solicitada"].min()
-        )
-        & (history["frequencia_realocacao"].isin(["anual", "trimestral"]))
+    st.subheader("Todas as Configurações Consolidadas")
+    st.dataframe(
+        _prepare_snake_case_table(configuration_summary),
+        width="stretch",
+    )
+
+    st.subheader("Performance de Todas as Configurações com Início em 12/03/2026")
+    start_date_history = history[
+        history["data_inicio_solicitada"] == LIVE_ANALYSIS_START
     ].copy()
-    rebalancing_comparison["valor_base_100"] = (
-        rebalancing_comparison["valor_carteira"] / INITIAL_CAPITAL
+    start_date_history["valor_base_100"] = (
+        start_date_history["valor_carteira"] / INITIAL_CAPITAL
     ) * 100
-    comparison_chart = rebalancing_comparison.pivot_table(
+    start_date_chart = start_date_history.pivot_table(
         index="Data",
-        columns="frequencia_realocacao",
+        columns="configuracao",
         values="valor_base_100",
         aggfunc="last",
     )
     render_zoomed_line_chart(
-        comparison_chart,
+        start_date_chart,
         series_name="Valor Base 100",
-        color_name="Frequência",
+        color_name="Configuração",
     )
-
-    if comparison_chart.nunique().max() <= 1:
-        st.info(
-            "Na janela atual, anual e trimestral ainda aparecem iguais porque não "
-            "houve tempo suficiente para disparar um novo rebalanceamento."
-        )
 
 
 def study_eng():

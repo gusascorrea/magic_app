@@ -4,6 +4,7 @@ import subprocess
 from pathlib import Path
 
 import pandas as pd
+from scripts.repair_performance_data import load_quote_matrix, repair_performance_dataframe
 
 """
 run:
@@ -13,6 +14,7 @@ poetry run python scripts/build_performance_history_parquet.py --since "2026-03-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT = Path("data/performance.csv")
+ROW_KEYS = ["Estratégia", "Volume Mínimo", "Ativos na Carteira", "Data", "papel"]
 
 
 def parse_args() -> argparse.Namespace:
@@ -108,6 +110,23 @@ def main() -> None:
             [history, load_working_tree_csv_version(input_path)],
             ignore_index=True,
         )
+    history = repair_performance_dataframe(
+        history,
+        load_quote_matrix(),
+        commit_sort_columns=["commit_committed_at", "commit_hash"],
+    )
+    history["_commit_sort"] = pd.to_datetime(
+        history["commit_committed_at"],
+        utc=True,
+        format="mixed",
+        errors="coerce",
+    )
+    history = (
+        history.sort_values(["_commit_sort", "commit_hash"])
+        .drop_duplicates(subset=ROW_KEYS, keep="last")
+        .drop(columns="_commit_sort")
+        .reset_index(drop=True)
+    )
     destination = REPO_ROOT / output_path
     destination.parent.mkdir(parents=True, exist_ok=True)
     history.to_parquet(destination, index=False, engine="pyarrow")
