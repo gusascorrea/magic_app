@@ -60,23 +60,23 @@ fi
 
 "${PYTHON_BIN}" -c "import sys; print(f'Python selecionado: {sys.executable}')"
 
-"${PYTHON_BIN}" -m scripts.get_fundamentus_data
+"${PYTHON_BIN}" -m backend.jobs.get_fundamentus_data
 
-"${PYTHON_BIN}" -m scripts.update_market_benchmarks
+"${PYTHON_BIN}" -m backend.jobs.update_market_benchmarks
 
-"${PYTHON_BIN}" -m scripts.performance
+"${PYTHON_BIN}" -m backend.jobs.update_performance_snapshot
 
-"${PYTHON_BIN}" -m scripts.build_performance_history_parquet --include-working-tree
+"${PYTHON_BIN}" -m backend.jobs.build_performance_history_parquet --include-working-tree
 
 if [[ -f "${REPO_ROOT}/http_cache.sqlite" ]]; then
   rm "${REPO_ROOT}/http_cache.sqlite"
 fi
 
-# git add .
-# git diff --cached --quiet && exit 0
+git add .
+git diff --cached --quiet && exit 0
 
-# git commit -m "Dados da Fundamentus atualizados"
-# git push
+git commit -m "Dados da Fundamentus atualizados"
+git push
 
 echo "Atualizacao concluida"
 echo "######################################################################"

@@ -1,6 +1,6 @@
 import streamlit as st
 
-from app.config import REFERENCE_PDF_PATH
+from shared.config import REFERENCE_PDF_PATH
 
 
 def render_credits(language):

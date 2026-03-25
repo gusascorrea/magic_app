@@ -1,8 +1,8 @@
 import pandas as pd
 import streamlit as st
 
-from app.clients.parquet_client import read_parquet
-from app.config import (
+from shared.clients.parquet_client import read_parquet
+from shared.config import (
     BENCHMARK_HISTORY_PATH,
     BENCHMARK_LABELS,
     PERFORMANCE_HISTORY_PATH,

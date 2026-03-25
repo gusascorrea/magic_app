@@ -12,6 +12,9 @@ PERFORMANCE_HISTORY_PATH = DATA_DIR / "performance_committed_since_2026-03-10.pa
 QUOTE_HISTORY_PATH = DATA_DIR / "fundamentus_data.parquet"
 BENCHMARK_HISTORY_PATH = DATA_DIR / "benchmark_history.parquet"
 REFERENCE_PDF_PATH = REFERENCES_DIR / "TCC Magic Formula.pdf"
+PERFORMANCE_CSV_PATH = DATA_DIR / "performance.csv"
+PERFORMANCE_PERIOD_ANALYSIS_PATH = DATA_DIR / "performance_period_analysis.parquet"
+
 CDI_FTP_HOST = "ftp.cetip.com.br"
 CDI_FTP_DIR = "MediaCDI"
 DEFAULT_BENCHMARK_START_DATE = pd.Timestamp("2026-03-01")

@@ -1,45 +1,20 @@
-import argparse
 from pathlib import Path
 
 import pandas as pd
 
+from shared.clients.parquet_client import read_parquet, write_parquet
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_INPUT = Path("data/performance_committed_since_2026-03-10.parquet")
-DEFAULT_OUTPUT = Path("data/performance_period_analysis.parquet")
 
 PORTFOLIO_KEYS = ["Estratégia", "Volume Mínimo", "Ativos na Carteira"]
 ROW_KEYS = PORTFOLIO_KEYS + ["Data", "papel"]
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Gera uma analise de performance por combinacao de carteira "
-            "em frequencias mensal, trimestral e anual."
-        )
-    )
-    parser.add_argument(
-        "--input",
-        default=str(DEFAULT_INPUT),
-        help="Arquivo parquet com o historico commitado de performance.",
-    )
-    parser.add_argument(
-        "--output",
-        default=str(DEFAULT_OUTPUT),
-        help="Arquivo parquet de saida com a analise consolidada.",
-    )
-    return parser.parse_args()
-
-
 def load_latest_rows(input_path: Path) -> pd.DataFrame:
-    df = pd.read_parquet(input_path)
+    df = read_parquet(input_path)
     df["Data"] = pd.to_datetime(df["Data"])
     df["commit_committed_at"] = pd.to_datetime(df["commit_committed_at"], utc=True)
     df["Valor"] = pd.to_numeric(df["Valor"], errors="coerce")
 
-    # Cada commit replica o CSV completo. Mantemos apenas a linha mais recente
-    # para cada ativo dentro de cada carteira/data.
     df = (
         df.sort_values("commit_committed_at")
         .drop_duplicates(subset=ROW_KEYS, keep="last")
@@ -112,23 +87,6 @@ def build_period_analysis(daily: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def main() -> None:
-    args = parse_args()
-    input_path = REPO_ROOT / Path(args.input)
-    output_path = REPO_ROOT / Path(args.output)
-
-    latest_rows = load_latest_rows(input_path)
-    daily = build_daily_portfolio_values(latest_rows)
-    analysis = build_period_analysis(daily)
-
+def save_period_analysis(df: pd.DataFrame, output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    analysis.to_parquet(output_path, index=False, engine="pyarrow")
-
-    print(f"Arquivo gerado: {output_path}")
-    print(f"Carteiras unicas: {daily[PORTFOLIO_KEYS].drop_duplicates().shape[0]}")
-    print(f"Datas unicas: {daily['Data'].nunique()}")
-    print(f"Linhas da analise: {len(analysis)}")
-
-
-if __name__ == "__main__":
-    main()
+    write_parquet(df, output_path, engine="pyarrow")

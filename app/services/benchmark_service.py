@@ -1,7 +1,7 @@
 import pandas as pd
 
-from app.config import BENCHMARK_LABELS
 from app.repositories.history_repository import load_live_benchmark_history
+from shared.config import BENCHMARK_LABELS
 
 
 def build_live_benchmark_chart(chart_dates):

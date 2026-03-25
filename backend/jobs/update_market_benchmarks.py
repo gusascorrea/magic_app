@@ -2,10 +2,10 @@ from datetime import timedelta
 
 import pandas as pd
 
-from app.clients.cdi_benchmark_client import download_history as download_cdi_history
-from app.clients.parquet_client import read_parquet, write_parquet
-from app.clients.yahoo_benchmark_client import download_history as download_yahoo_history
-from app.config import (
+from shared.clients.cdi_benchmark_client import download_history as download_cdi_history
+from shared.clients.parquet_client import read_parquet, write_parquet
+from shared.clients.yahoo_benchmark_client import download_history as download_yahoo_history
+from shared.config import (
     BENCHMARK_COLUMNS,
     BENCHMARK_HISTORY_PATH,
     BENCHMARK_REFRESH_LOOKBACK_DAYS,

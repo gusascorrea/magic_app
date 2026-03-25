@@ -1,12 +1,12 @@
 import pandas as pd
 import streamlit as st
 
-from app.config import INITIAL_CAPITAL, LIVE_ANALYSIS_START
 from app.controllers.live_study_controller import get_live_study_view_model
 from app.services.benchmark_service import build_live_benchmark_chart
 from app.services.reallocation_service import resolve_chart_start_date
 from app.utils.formatting import prepare_snake_case_table
 from app.views.components.charts import render_zoomed_line_chart
+from shared.config import INITIAL_CAPITAL, LIVE_ANALYSIS_START
 
 
 def render_live_study_page():

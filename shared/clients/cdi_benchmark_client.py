@@ -3,7 +3,7 @@ from io import BytesIO
 
 import pandas as pd
 
-from app.config import CDI_FTP_DIR, CDI_FTP_HOST
+from shared.config import CDI_FTP_DIR, CDI_FTP_HOST
 
 
 def parse_cdi_rate(raw_text: str) -> float:

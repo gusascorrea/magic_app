@@ -2,16 +2,16 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from app.config import (
+from app.repositories.history_repository import (
+    load_live_portfolio_history,
+    load_live_quote_history,
+)
+from shared.config import (
     INITIAL_CAPITAL,
     LIVE_ANALYSIS_START,
     MIN_ANALYSIS_TRADING_DAYS,
     PORTFOLIO_KEYS,
     REALLOCATION_FREQUENCIES,
-)
-from app.repositories.history_repository import (
-    load_live_portfolio_history,
-    load_live_quote_history,
 )
 
 

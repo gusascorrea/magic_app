@@ -1,6 +1,6 @@
 import streamlit as st
 
-from app.clients.fundamentus_client import get_resultado_raw, list_papel_setor
+from shared.clients.fundamentus_client import get_resultado_raw, list_papel_setor
 
 
 def _safe_list_papel_setor(setor_id):

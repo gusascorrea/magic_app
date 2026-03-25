@@ -1,6 +1,6 @@
 import streamlit as st
 
-from app.config import IMAGES_DIR
+from shared.config import IMAGES_DIR
 
 
 def render_study_page(language):
