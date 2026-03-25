@@ -295,6 +295,8 @@ def build_live_reallocation_analysis():
             as_index=False,
         )
         .agg(
+            retorno_medio=("retorno_total", "mean"),
+            retorno_q1=("retorno_total", lambda series: series.quantile(0.25)),
             cagr_medio=("cagr", "mean"),
             cagr_mediano=("cagr", "median"),
             cagr_min=("cagr", "min"),
@@ -311,7 +313,19 @@ def build_live_reallocation_analysis():
             razao_q1_cagr_q1_drawdown=lambda df: df.apply(
                 lambda row: safe_ratio(row["cagr_q1"], row["drawdown_q1"]),
                 axis=1,
-            )
+            ),
+            razao_q1_cagr_drawdown_pior=lambda df: df.apply(
+                lambda row: safe_ratio(row["cagr_q1"], row["drawdown_pior"]),
+                axis=1,
+            ),
+            razao_q1_retorno_q1_drawdown=lambda df: df.apply(
+                lambda row: safe_ratio(row["retorno_q1"], row["drawdown_q1"]),
+                axis=1,
+            ),
+            razao_q1_retorno_drawdown_pior=lambda df: df.apply(
+                lambda row: safe_ratio(row["retorno_q1"], row["drawdown_pior"]),
+                axis=1,
+            ),
         )
         .sort_values(
             [
