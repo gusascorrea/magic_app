@@ -242,7 +242,14 @@ def build_live_benchmark_chart(chart_dates):
     return benchmark_chart, warnings
 
 
-def render_zoomed_line_chart(chart_df, series_name="Série", color_name="Legenda"):
+def render_zoomed_line_chart(
+    chart_df,
+    series_name="Série",
+    color_name="Legenda",
+    highlight_best_worst=False,
+    best_config_label=None,
+    worst_config_label=None,
+):
     if chart_df.empty:
         st.info("Não há dados suficientes para exibir o gráfico.")
         return
@@ -261,21 +268,98 @@ def render_zoomed_line_chart(chart_df, series_name="Série", color_name="Legenda
         .dropna(subset=[series_name])
     )
 
-    chart = (
-        alt.Chart(chart_data)
-        .mark_line(strokeWidth=2)
-        .encode(
+    if highlight_best_worst:
+        available_configs = set(chart_data[color_name].dropna().unique())
+        best_config = (
+            best_config_label if best_config_label in available_configs else None
+        )
+        worst_config = (
+            worst_config_label if worst_config_label in available_configs else None
+        )
+
+        chart_data["categoria_destaque"] = "Demais"
+        if best_config is not None:
+            chart_data.loc[
+                chart_data[color_name] == best_config, "categoria_destaque"
+            ] = "Melhor"
+        if worst_config is not None:
+            chart_data.loc[
+                chart_data[color_name] == worst_config, "categoria_destaque"
+            ] = "Pior"
+
+        base_chart = alt.Chart(chart_data).encode(
             x=alt.X("Data:T", title=None),
             y=alt.Y(f"{series_name}:Q", title=None, scale=alt.Scale(domain=y_domain)),
-            color=alt.Color(f"{color_name}:N", title=None),
+            detail=alt.Detail(f"{color_name}:N"),
             tooltip=[
                 alt.Tooltip("Data:T", title="Data"),
                 alt.Tooltip(f"{color_name}:N", title="Série"),
+                alt.Tooltip(
+                    "categoria_destaque:N", title="Classificação no fim do período"
+                ),
                 alt.Tooltip(f"{series_name}:Q", title="Valor", format=".2f"),
             ],
         )
-        .properties(height=360)
-    )
+
+        demais_chart = (
+            base_chart.transform_filter(alt.datum.categoria_destaque == "Demais")
+            .mark_line(strokeWidth=1.5, opacity=0.55, color="#9ca3af")
+        )
+
+        pior_chart = (
+            base_chart.transform_filter(alt.datum.categoria_destaque == "Pior")
+            .mark_line(strokeWidth=3, color="#ef4444")
+        )
+
+        melhor_chart = (
+            base_chart.transform_filter(alt.datum.categoria_destaque == "Melhor")
+            .mark_line(strokeWidth=3, color="#22c55e")
+        )
+
+        legend_data = pd.DataFrame(
+            {
+                "categoria_destaque": ["Melhor", "Pior", "Demais"],
+                "cor": ["#22c55e", "#ef4444", "#9ca3af"],
+            }
+        )
+
+        legend = (
+            alt.Chart(legend_data)
+            .mark_point(opacity=0)
+            .encode(
+                color=alt.Color(
+                    "categoria_destaque:N",
+                    title=None,
+                    scale=alt.Scale(
+                        domain=["Melhor", "Pior", "Demais"],
+                        range=["#22c55e", "#ef4444", "#9ca3af"],
+                    ),
+                    legend=alt.Legend(orient="right"),
+                )
+            )
+        )
+
+        chart = (demais_chart + pior_chart + melhor_chart + legend).properties(
+            height=360
+        )
+    else:
+        chart = (
+            alt.Chart(chart_data)
+            .mark_line(strokeWidth=2)
+            .encode(
+                x=alt.X("Data:T", title=None),
+                y=alt.Y(
+                    f"{series_name}:Q", title=None, scale=alt.Scale(domain=y_domain)
+                ),
+                color=alt.Color(f"{color_name}:N", title=None),
+                tooltip=[
+                    alt.Tooltip("Data:T", title="Data"),
+                    alt.Tooltip(f"{color_name}:N", title="Série"),
+                    alt.Tooltip(f"{series_name}:Q", title="Valor", format=".2f"),
+                ],
+            )
+            .properties(height=360)
+        )
 
     st.altair_chart(chart, width="stretch")
 
@@ -484,21 +568,28 @@ def build_live_reallocation_analysis():
             retorno_mediano=("retorno_total", "median"),
             retorno_min=("retorno_total", "min"),
             retorno_max=("retorno_total", "max"),
+            retorno_q1=("retorno_total", lambda series: series.quantile(0.25)),
             drawdown_medio=("drawdown_maximo", "mean"),
             drawdown_pior=("drawdown_maximo", "min"),
+            drawdown_q1=("drawdown_maximo", lambda series: series.quantile(0.25)),
             volatilidade_media=("volatilidade_anualizada", "mean"),
             vitorias_por_periodo=("venceu_periodo", "sum"),
             trocas_totais=("ativos_trocados_total", "sum"),
         )
         .assign(
-            razao_media_retorno_drawdown=lambda df: df.apply(
-                lambda row: _safe_ratio(row["retorno_medio"], row["drawdown_pior"]),
+            razao_q1_retorno_q1_drawdown=lambda df: df.apply(
+                lambda row: _safe_ratio(row["retorno_q1"], row["drawdown_q1"]),
                 axis=1,
             )
         )
         .sort_values(
-            ["vitorias_por_periodo", "retorno_medio", "razao_media_retorno_drawdown"],
-            ascending=[False, False, False],
+            [
+                "razao_q1_retorno_q1_drawdown",
+                "retorno_q1",
+                "drawdown_q1",
+                "vitorias_por_periodo",
+            ],
+            ascending=[False, False, False, False],
         )
         .reset_index(drop=True)
     )
@@ -703,8 +794,13 @@ def live_study():
 
     best_configuration = configuration_summary.iloc[0]
     worst_configuration = configuration_summary.sort_values(
-        ["retorno_medio", "razao_media_retorno_drawdown", "drawdown_pior"],
-        ascending=[True, True, True],
+        [
+            "razao_q1_retorno_q1_drawdown",
+            "retorno_q1",
+            "drawdown_q1",
+            "vitorias_por_periodo",
+        ],
+        ascending=[True, True, True, True],
     ).iloc[0]
 
     st.markdown("---")
@@ -734,7 +830,7 @@ def live_study():
         width="stretch",
     )
 
-    st.write("Top 10 configurações por retorno médio")
+    st.write("Top 10 configurações por Q1 de retorno / Q1 de drawdown")
     st.dataframe(
         _prepare_snake_case_table(
             configuration_summary[
@@ -743,6 +839,9 @@ def live_study():
                     "Volume Mínimo",
                     "Ativos na Carteira",
                     "frequencia_realocacao",
+                    "razao_q1_retorno_q1_drawdown",
+                    "retorno_q1",
+                    "drawdown_q1",
                     "retorno_medio",
                     "volatilidade_media",
                     "drawdown_medio",
@@ -823,6 +922,9 @@ def live_study():
         start_date_chart,
         series_name="Valor Base 100",
         color_name="Configuração",
+        highlight_best_worst=True,
+        best_config_label=best_label,
+        worst_config_label=worst_label,
     )
 
 
