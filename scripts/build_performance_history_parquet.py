@@ -36,6 +36,11 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Caminho de saida do parquet. Se omitido, usa data/<nome>_committed_since_<data>.parquet.",
     )
+    parser.add_argument(
+        "--include-working-tree",
+        action="store_true",
+        help="Inclui a versao atual do CSV no workspace, mesmo antes de commit.",
+    )
     return parser.parse_args()
 
 
@@ -75,6 +80,17 @@ def load_committed_csv_versions(input_path: Path, since: str) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
+def load_working_tree_csv_version(input_path: Path) -> pd.DataFrame:
+    working_tree_path = REPO_ROOT / input_path
+    if not working_tree_path.exists():
+        raise FileNotFoundError(f"Arquivo nao encontrado no workspace: {working_tree_path}")
+
+    frame = pd.read_csv(working_tree_path)
+    frame["commit_hash"] = "WORKING_TREE"
+    frame["commit_committed_at"] = pd.Timestamp.now(tz="America/Sao_Paulo").isoformat()
+    return frame
+
+
 def main() -> None:
     args = parse_args()
     input_path = Path(args.input)
@@ -85,6 +101,11 @@ def main() -> None:
     )
 
     history = load_committed_csv_versions(input_path, args.since)
+    if args.include_working_tree:
+        history = pd.concat(
+            [history, load_working_tree_csv_version(input_path)],
+            ignore_index=True,
+        )
     destination = REPO_ROOT / output_path
     destination.parent.mkdir(parents=True, exist_ok=True)
     history.to_parquet(destination, index=False, engine="pyarrow")

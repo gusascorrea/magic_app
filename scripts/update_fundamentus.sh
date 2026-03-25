@@ -66,6 +66,8 @@ fi
 
 "${PYTHON_BIN}" -m scripts.performance
 
+"${PYTHON_BIN}" -m scripts.build_performance_history_parquet --include-working-tree
+
 if [[ -f "${REPO_ROOT}/http_cache.sqlite" ]]; then
   rm "${REPO_ROOT}/http_cache.sqlite"
 fi
