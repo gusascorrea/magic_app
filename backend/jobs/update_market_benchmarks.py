@@ -1,34 +1,25 @@
 from datetime import timedelta
-from ftplib import FTP
-from io import BytesIO
-from pathlib import Path
 
 import pandas as pd
-import yfinance as yf
 
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-BENCHMARK_HISTORY_PATH = REPO_ROOT / "data" / "benchmark_history.parquet"
-PERFORMANCE_HISTORY_PATH = (
-    REPO_ROOT / "data" / "performance_committed_since_2026-03-10.parquet"
+from shared.clients.cdi_benchmark_client import download_history as download_cdi_history
+from shared.clients.parquet_client import read_parquet, write_parquet
+from shared.clients.yahoo_benchmark_client import download_history as download_yahoo_history
+from shared.config import (
+    BENCHMARK_COLUMNS,
+    BENCHMARK_HISTORY_PATH,
+    BENCHMARK_REFRESH_LOOKBACK_DAYS,
+    DEFAULT_BENCHMARK_START_DATE,
+    PERFORMANCE_HISTORY_PATH,
+    YAHOO_BENCHMARKS,
 )
-CDI_FTP_HOST = "ftp.cetip.com.br"
-CDI_FTP_DIR = "MediaCDI"
-DEFAULT_START_DATE = pd.Timestamp("2026-03-01")
-REFRESH_LOOKBACK_DAYS = 10
-YAHOO_BENCHMARKS = {
-    "ibov_close": {"ticker": "^BVSP", "label": "IBOV"},
-    "sp500_close": {"ticker": "^GSPC", "label": "S&P500"},
-    "bitcoin_close": {"ticker": "BTC-USD", "label": "Bitcoin"},
-}
-BENCHMARK_COLUMNS = ["Data", *YAHOO_BENCHMARKS.keys(), "cdi_rate_aa"]
 
 
 def load_existing_benchmark_history() -> pd.DataFrame:
     if not BENCHMARK_HISTORY_PATH.exists():
         return pd.DataFrame(columns=BENCHMARK_COLUMNS)
 
-    df = pd.read_parquet(BENCHMARK_HISTORY_PATH)
+    df = read_parquet(BENCHMARK_HISTORY_PATH)
     df["Data"] = pd.to_datetime(df["Data"])
     for column in BENCHMARK_COLUMNS:
         if column == "Data":
@@ -39,10 +30,10 @@ def load_existing_benchmark_history() -> pd.DataFrame:
 
 
 def resolve_default_start_date() -> pd.Timestamp:
-    candidates = [DEFAULT_START_DATE]
+    candidates = [DEFAULT_BENCHMARK_START_DATE]
 
     if PERFORMANCE_HISTORY_PATH.exists():
-        performance_history = pd.read_parquet(PERFORMANCE_HISTORY_PATH, columns=["Data"])
+        performance_history = read_parquet(PERFORMANCE_HISTORY_PATH, columns=["Data"])
         performance_history["Data"] = pd.to_datetime(performance_history["Data"])
         if not performance_history.empty:
             candidates.append(performance_history["Data"].min())
@@ -62,70 +53,8 @@ def resolve_fetch_start_date(
     if available_dates.empty:
         return default_start_date
 
-    watermark_start_date = available_dates.max() - timedelta(days=REFRESH_LOOKBACK_DAYS)
+    watermark_start_date = available_dates.max() - timedelta(days=BENCHMARK_REFRESH_LOOKBACK_DAYS)
     return max(default_start_date, watermark_start_date)
-
-
-def download_yahoo_history(
-    ticker: str, value_column: str, start_date: pd.Timestamp, end_date: pd.Timestamp
-) -> pd.DataFrame:
-    df = yf.download(
-        ticker,
-        start=start_date.strftime("%Y-%m-%d"),
-        end=(end_date + pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
-        interval="1d",
-        auto_adjust=False,
-        progress=False,
-        threads=False,
-    )
-
-    if df.empty:
-        return pd.DataFrame(columns=["Data", value_column])
-
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.get_level_values(0)
-
-    price_column = "Adj Close" if "Adj Close" in df.columns else "Close"
-    df = df.reset_index().rename(columns={"Date": "Data", price_column: value_column})
-    df["Data"] = pd.to_datetime(df["Data"])
-    df[value_column] = pd.to_numeric(df[value_column], errors="coerce")
-    return df[["Data", value_column]].dropna().reset_index(drop=True)
-
-
-def parse_cdi_rate(raw_text: str) -> float:
-    value = raw_text.strip()
-    if not value:
-        raise ValueError("Arquivo do CDI vazio.")
-    if not value.isdigit():
-        raise ValueError(f"Conteudo inesperado para a taxa CDI: {value!r}")
-    return int(value) / 100
-
-
-def download_cdi_rate(reference_date: pd.Timestamp) -> dict:
-    file_name = reference_date.strftime("%Y%m%d") + ".txt"
-    buffer = BytesIO()
-
-    with FTP(host=CDI_FTP_HOST, timeout=30) as ftp:
-        ftp.login()
-        ftp.cwd(CDI_FTP_DIR)
-        ftp.retrbinary(f"RETR {file_name}", buffer.write)
-
-    rate = parse_cdi_rate(buffer.getvalue().decode("utf-8", errors="ignore"))
-    return {"Data": reference_date.normalize(), "cdi_rate_aa": rate}
-
-
-def download_cdi_history(start_date: pd.Timestamp, end_date: pd.Timestamp) -> pd.DataFrame:
-    rows = []
-    for reference_date in pd.date_range(start_date, end_date, freq="B"):
-        try:
-            rows.append(download_cdi_rate(reference_date))
-        except Exception:
-            continue
-
-    if not rows:
-        return pd.DataFrame(columns=["Data", "cdi_rate_aa"])
-
-    return pd.DataFrame(rows).sort_values("Data").reset_index(drop=True)
 
 
 def merge_histories(
@@ -270,7 +199,7 @@ def main():
         print("Nenhuma mudanca detectada. Parquet mantido sem regravacao.")
         return
 
-    output.to_parquet(BENCHMARK_HISTORY_PATH, engine="pyarrow")
+    write_parquet(output, BENCHMARK_HISTORY_PATH, engine="pyarrow")
     print(f"Benchmarks atualizados: {len(output)} linhas salvas em {BENCHMARK_HISTORY_PATH}")
 
 

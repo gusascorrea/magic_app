@@ -1,33 +1,19 @@
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from shared.clients.parquet_client import read_parquet, write_parquet
+from shared.config import INITIAL_CAPITAL, QUOTE_HISTORY_PATH
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-QUOTE_HISTORY_PATH = REPO_ROOT / "data" / "fundamentus_data.parquet"
+
 PORTFOLIO_KEYS = ["Estratégia", "Ativos na Carteira", "Volume Mínimo"]
-INITIAL_CAPITAL = 100000.0
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Recalcula Quantidade e Valor em snapshots de performance."
-    )
-    parser.add_argument("--input", required=True, help="Arquivo de entrada CSV ou Parquet.")
-    parser.add_argument(
-        "--output",
-        default=None,
-        help="Arquivo de saida CSV ou Parquet. Se omitido, sobrescreve a entrada.",
-    )
-    return parser.parse_args()
 
 
 def load_quote_matrix() -> pd.DataFrame:
-    quotes = pd.read_parquet(QUOTE_HISTORY_PATH)
+    quotes = read_parquet(QUOTE_HISTORY_PATH)
     if "papel" not in quotes.columns:
         quotes = quotes.reset_index(names="papel")
     quotes = quotes.rename(columns={"update date": "Data"})
@@ -106,7 +92,7 @@ def read_table(path: Path) -> pd.DataFrame:
     if path.suffix == ".csv":
         return pd.read_csv(path)
     if path.suffix == ".parquet":
-        return pd.read_parquet(path)
+        return read_parquet(path)
     raise ValueError(f"Formato nao suportado: {path.suffix}")
 
 
@@ -116,35 +102,6 @@ def write_table(df: pd.DataFrame, path: Path) -> None:
         df.to_csv(path, index=False)
         return
     if path.suffix == ".parquet":
-        df.to_parquet(path, index=False, engine="pyarrow")
+        write_parquet(df, path, engine="pyarrow")
         return
     raise ValueError(f"Formato nao suportado: {path.suffix}")
-
-
-def main() -> None:
-    args = parse_args()
-    input_path = REPO_ROOT / args.input
-    output_path = REPO_ROOT / args.output if args.output else input_path
-
-    df = read_table(input_path)
-    quote_matrix = load_quote_matrix()
-    commit_sort_columns = (
-        ["commit_committed_at", "commit_hash"]
-        if {"commit_committed_at", "commit_hash"}.issubset(df.columns)
-        else None
-    )
-    repaired = repair_performance_dataframe(
-        df,
-        quote_matrix,
-        commit_sort_columns=commit_sort_columns,
-    )
-    write_table(repaired, output_path)
-
-    print(f"Arquivo reparado: {output_path}")
-    print(f"Linhas: {len(repaired)}")
-    print(f"Quantidade nula: {int(repaired['Quantidade'].isna().sum())}")
-    print(f"Valor nulo: {int(repaired['Valor'].isna().sum())}")
-
-
-if __name__ == "__main__":
-    main()

@@ -3,6 +3,9 @@ from io import StringIO
 import pandas as pd
 import requests
 
+from shared.clients.parquet_client import read_parquet, write_parquet
+from shared.config import QUOTE_HISTORY_PATH
+
 
 RESULTADO_URLS = [
     "https://www.fundamentus.com.br/resultado.php",
@@ -48,11 +51,7 @@ def fetch_resultado_raw() -> pd.DataFrame:
 
     for url in RESULTADO_URLS:
         try:
-            response = requests.get(
-                url,
-                headers=REQUEST_HEADERS,
-                timeout=30,
-            )
+            response = requests.get(url, headers=REQUEST_HEADERS, timeout=30)
             response.raise_for_status()
 
             tables = pd.read_html(
@@ -91,19 +90,17 @@ def fetch_resultado_raw() -> pd.DataFrame:
     ) from last_error
 
 
-data = fetch_resultado_raw()
+def update_fundamentus_history() -> int:
+    latest_data = fetch_resultado_raw()
+    latest_data["update date"] = pd.Timestamp.now().strftime("%Y-%m-%d")
 
-data["update date"] = pd.Timestamp.now().strftime("%Y-%m-%d")
+    previous_data = read_parquet(QUOTE_HISTORY_PATH) if QUOTE_HISTORY_PATH.exists() else pd.DataFrame()
 
-previous_data = pd.read_parquet("data/fundamentus_data.parquet")
+    output = pd.concat([previous_data, latest_data])
+    output["ticker"] = output.index
+    output.drop_duplicates(subset=["ticker", "update date"], keep="last", inplace=True)
 
-data = pd.concat([previous_data, data])
-data["ticker"] = data.index
-
-data.drop_duplicates(subset=["ticker", "update date"], keep="last", inplace=True)
-
-print("Novos dados:", len(data) - len(previous_data))
-
-data.drop(columns="ticker", inplace=True)
-
-data.to_parquet("data/fundamentus_data.parquet", engine="pyarrow")
+    new_rows = len(output) - len(previous_data)
+    output.drop(columns="ticker", inplace=True)
+    write_parquet(output, QUOTE_HISTORY_PATH, engine="pyarrow")
+    return new_rows
