@@ -12,6 +12,12 @@ from shared.config import INITIAL_CAPITAL, QUOTE_HISTORY_PATH
 PORTFOLIO_KEYS = ["Estratégia", "Ativos na Carteira", "Volume Mínimo"]
 
 
+def _deduplicate_papers(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame["papel"].is_unique:
+        return frame
+    return frame.drop_duplicates(subset=["papel"], keep="last")
+
+
 def load_quote_matrix() -> pd.DataFrame:
     quotes = read_parquet(QUOTE_HISTORY_PATH)
     if "papel" not in quotes.columns:
@@ -47,14 +53,22 @@ def repair_performance_dataframe(
     if commit_sort_columns:
         sort_columns.extend(commit_sort_columns)
     repaired = repaired.sort_values(sort_columns).reset_index(drop=True)
+    snapshot_group_columns = ["Data"]
+    if commit_sort_columns:
+        snapshot_group_columns.extend(commit_sort_columns)
 
     result_frames = []
 
     for _, portfolio_df in repaired.groupby(PORTFOLIO_KEYS, dropna=False, sort=False):
         previous_quantities: pd.Series | None = None
 
-        for date, daily_df in portfolio_df.groupby("Data", sort=True):
-            current = daily_df.copy().set_index("papel")
+        for snapshot_key, daily_df in portfolio_df.groupby(
+            snapshot_group_columns,
+            dropna=False,
+            sort=False,
+        ):
+            date = snapshot_key[0] if isinstance(snapshot_key, tuple) else snapshot_key
+            current = _deduplicate_papers(daily_df.copy()).set_index("papel")
             prices = current["Cotação"].astype(float)
             quantities = pd.Series(0.0, index=current.index, dtype="float64")
 
